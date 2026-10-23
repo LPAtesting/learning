@@ -1,0 +1,9 @@
+{
+  "appId": "com.dealcraft.trainer",
+  "appName": "DealCraft",
+  "webDir": "www",
+  "backgroundColor": "#FBF8F1",
+  "android": {
+    "allowMixedContent": false
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "DealCraft: M&A Trainer",
+  "short_name": "DealCraft",
+  "id": "./",
+  "start_url": "./DealCraft%20App.dc.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FBF8F1",
+  "theme_color": "#FBF8F1",
+  "description": "Company Law, M&A Transactions and the Singapore Take-over Code, 30 questions a day.",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
