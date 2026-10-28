@@ -1,5 +1,5 @@
-const CACHE="dealcraft-v4";
-const SHELL=["./DealCraft%20App.dc.html","./support.js","./data/bundle/ma.js","./data/bundle/cl.js","./data/bundle/tc.js","./data/bundle/pb.js","./data/rewrites.js","./data/rewrites2.js","./data/rewrites3.js","./data/rewrites4.js","./manifest.webmanifest","./icons/icon-192.png","./icons/icon-512.png"];
+const CACHE="dealcraft-v5";
+const SHELL=["./DealCraft%20App.dc.html","./support.js","./data/bundle/ma.js","./data/bundle/cl.js","./data/bundle/tc.js","./data/bundle/pb.js","./data/rewrites.js","./data/rewrites2.js","./data/rewrites3.js","./data/rewrites4.js","./data/law302.js","./manifest.webmanifest","./icons/icon-192.png","./icons/icon-512.png"];
 self.addEventListener("install",e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).catch(()=>{})); self.skipWaiting(); });
 self.addEventListener("activate",e=>{ e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k))))); self.clients.claim(); });
 // Same-origin: network first (edits show immediately), cache as offline fallback.

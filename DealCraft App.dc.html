@@ -62,6 +62,7 @@
 <script src="data/rewrites2.js"></script>
 <script src="data/rewrites3.js"></script>
 <script src="data/rewrites4.js"></script>
+<script src="data/law302.js"></script>
 </helmet>
 <div style="min-height:100vh;background:#E9E2D2;">
   {{ body }}
@@ -588,13 +589,15 @@ const TRACKS = [
         sub:"The Singapore Code on Take-overs and Mergers, rule by rule, as amended in 2026. Best taken after Part II, Chapter 3 (Public Takeovers).",
         secs:[ {t:"Introduction & Principles", ch:["tc1"]}, {t:"Before & During the Offer", ch:["tc2","tc3","tc4"]},
                {t:"Offer Types & Terms", ch:["tc5","tc6"]}, {t:"Process & Procedure", ch:["tc7","tc8"]} ]} ]},
-  { id:"pb", n:2, name:"Part B", noun:"Unit", color:"#3461B4", dark:"#244A8E", parts:[] }
+  { id:"pb", n:2, name:"Part B", noun:"Unit", color:"#3461B4", dark:"#244A8E", parts:[] },
+  // A learning journey: each lesson opens with a module reader before its questions. Parts are filled from data/law302.js on load.
+  { id:"lj", n:3, name:"LAW302 Conflict of Laws", noun:"Stage", color:"#2A7A8C", dark:"#1D5966", journey:true, since:"2026-10-28", parts:[] }
 ];
 const LMETA = {};
 // Track 1 section exams keep the old "part:<track>:<n>" ids, so earlier exam results carry over.
 function linkTrack(tr){ tr.parts.forEach(pt=>{ pt.track=tr; pt.secs.forEach((sc,si)=>{ if(!sc.ex) sc.ex="part:"+pt.id+":"+si;
   sc.ch.forEach(cid=>{ const u=UNIT[cid]; if(!u) return; u.track=tr; u.part=pt;
-    (u.lessons||[]).forEach((l,i)=>{ l.code=u.label+"."+(i+1); LMETA[l.id]={l,u,tr,pt}; }); }); }); }); }
+    (u.lessons||[]).forEach((l,i)=>{ l.code=l.code||(u.label+"."+(i+1)); LMETA[l.id]={l,u,tr,pt}; }); }); }); }); }
 linkTrack(TRACKS[0]);
 const PBCOL={"1":["#3461B4","#244A8E","#E8EEF8"],"2":["#0F8F9C","#0A6A74","#E2F4F5"],"3":["#7A5AF8","#5638C9","#EEE9FE"],"4":["#D9772B","#A9561A","#FBEBDD"],"5":["#5B6472","#3F4652","#EDEEF1"]};
 const PB_IC=[[/applied|scenario/i,"zap"],[/introduc|overview|roadmap|foundation|framework|sources/i,"compass"],
@@ -621,6 +624,29 @@ function loadPartB(){
     return {id:s.id, label:"Paper "+s.code, t:s.title, color:c[0], dark:c[1], sub:s.description, secs:[{t:s.title, ch, ex:"part:pb:"+s.id}]}; });
   linkTrack(tr);
 }
+// Track 3: each week is a part with one section (one exam), each stage a chapter, each module a lesson with reader blocks.
+const READ = {};
+function loadJourney(){
+  const tr=TRACKS.find(t=>t.journey), J=window.DC_BANK&&window.DC_BANK._journey; if(!tr||!J||tr.parts.length) return;
+  tr.levels=J.track.levels||{};
+  tr.parts=J.weeks.map(w=>{ const c=w.color;
+    const ch=w.stages.map(st=>{ const u={id:st.id, label:String(st.n), title:st.title, sub:st.sub, color:c[0], dark:c[1], tint:c[2],
+      lessons:st.lessons.map(l=>{ READ[l.id]=l; return {id:l.id, t:l.t, ic:l.ic, code:l.code, kind:l.kind}; })}; UNIT[u.id]=u; return u.id; });
+    return {id:w.id, label:w.label, t:w.t, full:w.full, color:c[0], dark:c[1], tint:c[2], sub:w.sub, about:w.about, secs:[{t:w.label+": "+w.t, ch, ex:"part:lj:"+w.id}]}; });
+  linkTrack(tr);
+}
+function lessonLabel(l){ return l.kind==="module" ? "Module "+l.code : (l.kind ? l.code+(l.kind==="overview"?" overview":"") : "Lesson "+l.code); }
+// Inline markdown used by the reader: **bold**, *italic* (and ***both***).
+function rich(s,k){ s=String(s==null?"":s); k=k||"r"; const out=[]; let i=0, buf="", n=0;
+  const push=()=>{ if(buf){ out.push(buf); buf=""; } };
+  while(i<s.length){
+    if(s[i]==="*" && s[i+1]==="*"){ let j=s.indexOf("**",i+2); while(j>=0 && s[j+2]==="*") j++;
+      if(j>i+2){ push(); out.push(h("b",{key:k+"b"+(n++),style:{fontWeight:800}}, rich(s.slice(i+2,j),k+n))); i=j+2; continue; } }
+    if(s[i]==="*" && s[i+1] && s[i+1]!==" " && s[i+1]!=="*"){ const j=s.indexOf("*",i+1);
+      if(j>i+1){ push(); out.push(h("i",{key:k+"i"+(n++)}, s.slice(i+1,j))); i=j+1; continue; } }
+    buf+=s[i]; i++; }
+  push(); return out; }
+const BADGE = { open:["Open","#FBF1D9","#9A6608"], obiter:["Obiter","#EDEEF1","#4A515E"], acad:["Academic view","#EDEEF1","#4A515E"], miss:["Missing reading","#FBEAE9","#B23636"] };
 
 const IC = {
   compass:()=>[h("circle",{key:1,cx:12,cy:12,r:9}),h("path",{key:2,d:"M15.6 8.4l-2.4 4.8-4.8 2.4 2.4-4.8z"})],
@@ -657,7 +683,11 @@ const IC = {
   download:()=>[h("path",{key:1,d:"M12 4v11M7 10.5l5 5 5-5M5 20h14"})],
   timer:()=>[h("circle",{key:1,cx:12,cy:13.5,r:7.5}),h("path",{key:2,d:"M12 9.5v4l2.5 1.5M9.5 3h5"})],
   chevron:()=>[h("path",{key:1,d:"M9 6l6 6-6 6"})],
-  dot:()=>[h("circle",{key:1,cx:12,cy:12,r:3})]
+  dot:()=>[h("circle",{key:1,cx:12,cy:12,r:3})],
+  monitor:()=>[h("rect",{key:1,x:3,y:4,width:18,height:12.5,rx:2}),h("path",{key:2,d:"M8.5 20.5h7M12 16.5v4"})],
+  mobile:()=>[h("rect",{key:1,x:6.5,y:2.5,width:11,height:19,rx:2.4}),h("path",{key:2,d:"M10.5 18.5h3"})],
+  bulb:()=>[h("path",{key:1,d:"M9 18h6M10 21h4"}),h("path",{key:2,d:"M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.2h5c0-.9.4-1.7 1.1-2.2A6 6 0 0 0 12 3z"})],
+  read:()=>[h("path",{key:1,d:"M3 5.5h6a3 3 0 0 1 3 3V20a2.5 2.5 0 0 0-2.5-2.5H3z"}),h("path",{key:2,d:"M21 5.5h-6a3 3 0 0 0-3 3V20a2.5 2.5 0 0 1 2.5-2.5H21z"})]
 };
 function icon(name,size,color,sw,filled){
   const f = IC[name]||IC.dot;
@@ -699,7 +729,7 @@ function loadProgress(){
   if(!p||typeof p!=="object") p={};
   return { xp:p.xp||0, streak:p.streak||0, best:p.best||p.streak||0, lastDay:p.lastDay||null,
     lessons:p.lessons||{}, srs:p.srs||{}, totals:p.totals||{answered:0,correct:0},
-    q:p.q||{}, days:p.days||{}, tday:p.tday||{}, wk:p.wk||{}, exams:p.exams||{} };
+    q:p.q||{}, days:p.days||{}, tday:p.tday||{}, wk:p.wk||{}, exams:p.exams||{}, read:p.read||{} };
 }
 const UIKEY = "dealcraft_ui";
 function loadUI(){ try{ const u=JSON.parse(localStorage.getItem(UIKEY)); if(u&&typeof u==="object") return u; }catch(e){} return {}; }
@@ -742,6 +772,8 @@ function mergeProg(b,l,r){
   o.srs=mMap(B("srs"),l.srs,r.srs,(bv,x,y)=>{ const cx=!bv||!syncEq(x,bv), cy=!bv||!syncEq(y,bv);
     const p= cx&&!cy ? x : (cy&&!cx ? y : ((x.box||1)<=(y.box||1) ? x : y)); return Object.assign({}, p, {lapses:a3(bv&&bv.lapses,x.lapses,y.lapses)}); });
   o.wk=mMap(B("wk"),l.wk,r.wk,(bv,x,y)=>Array.from(new Set((x||[]).concat(y||[]))));
+  // Modules read. A copy from an app version without this field has no "read" at all: keep the other side's rather than treating it as deleted.
+  o.read=(!l.read||!r.read) ? Object.assign({}, r.read||{}, l.read||{}) : mMap(B("read"),l.read,r.read,(bv,x,y)=>Math.max(+x||0,+y||0));
   o.exams=mMap(B("exams"),l.exams,r.exams,(bv,x,y)=>{ const late=(x.at||0)>=(y.at||0)?x:y;
     return Object.assign({}, late, {best:Math.max(x.best||0,y.best||0), passed:!!(x.passed||y.passed), tries:a3(bv&&bv.tries,x.tries,y.tries)}); });
   const key=p=>p?(p.lastDay||"")+"|"+(p.streak||0):null, bk=key(b);
@@ -862,15 +894,19 @@ function buzz(k){ if(!AU.hapOn) return; const d=HAP[k]; if(!d) return;
   if(HAPP){ capCall(HAPP, d[1], d[1]==="impact"?{style:d[2]}:{type:d[2]}); return; }
   try{ if(navigator.vibrate) navigator.vibrate(d[0]); }catch(e){} }
 function dueIn(days){ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+days); return d.getTime(); }
+// Tracks in the daily goal: those switched on in settings, counted only from the day a track was added (since), so earlier days keep their old goal.
+function dailyTracks(off,day){ const on=TRACKS.filter(t=>!(off&&off[t.id])), a=on.filter(t=>!t.since||!day||day>=t.since); return a.length?a:(on.length?on:TRACKS); }
 
 class Component extends DCLogic {
   constructor(props){
     super(props);
-    const ui=loadUI();
+    const ui=loadUI(), per=PER.includes(ui.per)?ui.per:15, off=(ui.dailyOff&&typeof ui.dailyOff==="object")?ui.dailyOff:{};
     this.state = { ready:false, screen:"home", prog:loadProgress(),
       tab:["learn","daily","exams","me"].includes(ui.tab)?ui.tab:"learn",
       track: TRACKS.some(t=>t.id===ui.track)?ui.track:TRACKS[0].id,
-      per: PER.includes(ui.per)?ui.per:15, goal:(PER.includes(ui.per)?ui.per:15)*TRACKS.length, sfx:ui.sfx!==false, music:ui.music!==false, haptics:ui.haptics!==false,
+      per, dailyOff:off, goal:per*dailyTracks(off,todayStr()).length, sfx:ui.sfx!==false, music:ui.music!==false, haptics:ui.haptics!==false,
+      desk:ui.desk===true, eli5:ui.eli5===true, wide:typeof window!=="undefined" && window.innerWidth>=900,
+      rd:null, rdFold:{}, rdCmp:"all", hint:false,
       guide:{}, sheet:null, popId:null, pending:null,
       mode:"lesson", lessonId:null, unit:null, exam:null, accent:{color:C.green,dark:C.greenD,tint:C.greenT},
       queue:[], idx:0, uniq:0, firstTry:0, sessionXp:0, combo:0, answers:[], t0:0, now:0, elapsed:0, goalAt:-1,
@@ -884,7 +920,7 @@ class Component extends DCLogic {
   componentDidMount(){
     this._t0=Date.now();
     const tick=()=>{ const B=window.DC_BANK;
-      if(B && B.f0v2 && (B._pbReady || Date.now()-this._t0>20000)){ this.buildIndex(); const mist=this.seedMist(); this.setState({ ready:true, mist, due:this.dueCount(this.state.prog,mist) }, ()=>{ this.scrollToCurrent(); this.syncSoon(400); }); }
+      if(B && B.f0v2 && ((B._pbReady && B._ljReady) || Date.now()-this._t0>20000)){ this.buildIndex(); const mist=this.seedMist(); this.setState({ ready:true, mist, due:this.dueCount(this.state.prog,mist) }, ()=>{ this.scrollToCurrent(); this.syncSoon(400); }); }
       else { this._t=setTimeout(tick,60); }
     };
     tick();
@@ -894,6 +930,8 @@ class Component extends DCLogic {
     document.addEventListener("visibilitychange", this._vis);
     this._bip=e=>{ e.preventDefault(); this.setState({installEvt:e}); };
     window.addEventListener("beforeinstallprompt", this._bip);
+    this._rs=()=>{ const w=window.innerWidth>=900; if(w!==this.state.wide) this.setState({wide:w}); };
+    window.addEventListener("resize", this._rs);
     this._pop=()=>{
       if(this._skipPop){ this._skipPop=false; this.syncHist(); return; }
       this._hist=false; this.back(); setTimeout(()=>this.syncHist(),60);
@@ -942,6 +980,7 @@ class Component extends DCLogic {
     document.removeEventListener("visibilitychange", this._vis);
     window.removeEventListener("beforeinstallprompt", this._bip);
     window.removeEventListener("popstate", this._pop);
+    window.removeEventListener("resize", this._rs);
     AU.setLevel(0);
   }
   componentDidUpdate(){
@@ -950,10 +989,10 @@ class Component extends DCLogic {
     if(ps.screen!==this.state.screen || ps.mode!==this.state.mode) this.syncMusic();
     this.syncHist();
   }
-  syncMusic(){ const s=this.state; AU.setLevel(s.screen==="play" ? (s.mode==="exam"?0:.32) : (s.screen==="examintro"?.3:1)); }
+  syncMusic(){ const s=this.state; AU.setLevel(s.screen==="play" ? (s.mode==="exam"?0:.32) : (s.screen==="examintro"?.3:(s.screen==="reader"?.2:1))); }
 
   buildIndex(){
-    loadPartB();
+    loadPartB(); loadJourney();
     this.ALLQ=[]; this.BYID={}; this.LES={}; this.RET={};
     const isV2=k=>/v2$/.test(k), REBUILT=new Set(), FIX=window.DC_BANK._fix||{}, HID=this.state.mist.hidden||{};
     Object.keys(window.DC_BANK).forEach(k=>{ if(isV2(k)&&Array.isArray(window.DC_BANK[k])) window.DC_BANK[k].forEach(q=>q&&REBUILT.add(q.lesson)); });
@@ -977,7 +1016,7 @@ class Component extends DCLogic {
   dueCount(prog,mist){ const now=Date.now(), hid=(mist||this.state.mist).hidden; return Object.keys(prog.srs||{}).filter(id=>(prog.srs[id].due||0)<=now && (!this.BYID||this.BYID[id]) && !hid[id] && !(this.RET&&this.RET[id])).length; }
   dueIds(){ const p=this.state.prog, now=Date.now(), hid=this.state.mist.hidden; return Object.keys(p.srs||{}).filter(id=>(p.srs[id].due||0)<=now && this.BYID[id] && !hid[id] && !this.RET[id]).sort((a,b)=>(p.srs[a].due||0)-(p.srs[b].due||0)); }
   lessonCount(id){ return (this.LES && this.LES[id]) ? this.LES[id].length : 0; }
-  saveUI(patch, extra){ const s=this.state; const v=Object.assign({track:s.track,tab:s.tab,per:s.per,sfx:s.sfx,music:s.music,haptics:s.haptics},patch);
+  saveUI(patch, extra){ const s=this.state; const v=Object.assign({track:s.track,tab:s.tab,per:s.per,sfx:s.sfx,music:s.music,haptics:s.haptics,desk:s.desk,eli5:s.eli5,dailyOff:s.dailyOff},patch);
     try{ localStorage.setItem(UIKEY, JSON.stringify(v)); }catch(e){} this.setState(Object.assign({},patch,extra||{})); }
   curTrack(){ return TRACKS.find(t=>t.id===this.state.track)||TRACKS[0]; }
   setTrack(id){ this.saveUI({track:id},{sheet:null,popId:null}); setTimeout(()=>this.scrollToCurrent(),40); }
@@ -996,16 +1035,26 @@ class Component extends DCLogic {
   // Answers per track on a day. The first time a day is touched it is seeded from question records, so earlier answers still count.
   seedT(p,t){ const m={}; for(const id in p.q){ const r=p.q[id]; if(r&&r[1]===t){ const k=this.trackOf(id); if(k) m[k]=(m[k]||0)+1; } } return m; }
   todayT(){ const p=this.state.prog, t=todayStr(); return (p.tday&&p.tday[t]) || this.seedT(p,t); }
-  capped(td){ const per=this.state.per; return TRACKS.reduce((n,t)=>n+Math.min((td&&td[t.id])||0, per),0); }
+  dailyT(day){ return dailyTracks(this.state.dailyOff, day||todayStr()); }
+  goalFor(day){ return this.state.per*this.dailyT(day).length; }
+  capped(td,day){ const per=this.state.per; return this.dailyT(day).reduce((n,t)=>n+Math.min((td&&td[t.id])||0, per),0); }
   dayN(){ return this.capped(this.todayT()); }
-  dayProg(id){ const p=this.state.prog; return (p.tday&&p.tday[id]) ? this.capped(p.tday[id]) : ((p.days[id]||[0])[0]); }
+  dayProg(id){ const p=this.state.prog; return (p.tday&&p.tday[id]) ? this.capped(p.tday[id],id) : ((p.days[id]||[0])[0]); }
+  setDaily(id){ const off=Object.assign({}, this.state.dailyOff); if(off[id]) delete off[id]; else off[id]=true;
+    if(!TRACKS.some(t=>!off[t.id])){ AU.play("nope"); this.flash("Keep at least one track in your daily goal"); return; }
+    AU.play("select"); this.saveUI({dailyOff:off},{goal:this.state.per*dailyTracks(off,todayStr()).length}); }
   curStreak(){ const p=this.state.prog; return (p.lastDay===todayStr()||p.lastDay===ydayStr()) ? (p.streak||0) : 0; }
   seen(){ const p=this.state.prog; if(this._smP===p.q) return this._sm; const m={};
     for(const id in p.q){ const q=this.BYID[id]; if(q) m[q.lesson]=(m[q.lesson]||0)+1; }
     this._smP=p.q; this._sm=m; return m; }
-  isDone(lid){ const x=this.state.prog.lessons[lid]; if(x&&x.plays>0) return true; const n=this.lessonCount(lid); return n>0 && (this.seen()[lid]||0)>=n; }
+  // A reading-only lesson (no questions) is done once read; any other lesson once played or fully seen.
+  isDone(lid){ const x=this.state.prog.lessons[lid]; if(x&&x.plays>0) return true; const n=this.lessonCount(lid);
+    if(!n) return !!(READ[lid] && this.isRead(lid)); return (this.seen()[lid]||0)>=n; }
+  isRead(lid){ return !!(this.state.prog.read||{})[lid]; }
   trackStats(tr){ let n=0,d=0,q=0; (this.TL[tr.id]||[]).forEach(({l})=>{ n++; q+=this.lessonCount(l.id); if(this.isDone(l.id)) d++; }); return {n,d,q}; }
-  nextLesson(tr){ for(const x of (this.TL[tr.id]||[])) if(!this.isDone(x.l.id) && this.lessonCount(x.l.id)>0) return x; return null; }
+  nextLesson(tr){ for(const x of (this.TL[tr.id]||[])) if(!this.isDone(x.l.id) && (this.lessonCount(x.l.id)>0 || READ[x.l.id])) return x; return null; }
+  // The lesson after lid on its track's path, done or not.
+  nextAfter(lid){ const lm=LMETA[lid]; if(!lm) return null; const a=this.TL[lm.tr.id]||[], i=a.findIndex(x=>x.l.id===lid); return i>=0 && i+1<a.length ? a[i+1] : null; }
   partStats(tr,pi){ const ls=(this.TL[tr.id]||[]).filter(x=>x.pi===pi); return { n:ls.length, d:ls.filter(x=>this.isDone(x.l.id)).length }; }
   secState(tr,pi,si){ const sc=tr.parts[pi].secs[si], ls=(this.TL[tr.id]||[]).filter(x=>x.pi===pi&&x.si===si), d=ls.filter(x=>this.isDone(x.l.id)).length, un=!!(this.props.unlockAll ?? false);
     return { sc, ls, n:ls.length, d, unlocked: un || (ls.length>0 && d===ls.length), rec:this.state.prog.exams[sc.ex] }; }
@@ -1022,7 +1071,7 @@ class Component extends DCLogic {
     return c;
   }
   workFor(q){
-    return { phase:"answer", lastCorrect:null, pick:null, val:"", matched:{}, mr:{}, sel:null, mwrong:null, mattempts:0, pairs:{}, mfirst:null,
+    return { phase:"answer", lastCorrect:null, pick:null, val:"", matched:{}, mr:{}, sel:null, mwrong:null, mattempts:0, pairs:{}, mfirst:null, hint:false,
       prevMiss: (q && this.state.mist.items[q.id]) || null,
       shR: (q && q.type==="match") ? shuffle(q.pairs.map((p,i)=>({li:i,text:p.r}))) : [],
       chosen:[], shChips: (q && q.type==="order") ? shuffle(q.steps.map((s,i)=>({idx:i,text:s}))) : [] };
@@ -1043,6 +1092,18 @@ class Component extends DCLogic {
     const cap=this.props.sessionSize ?? 0; if(cap>0) qs=qs.slice(0,cap);
     this.begin("lesson", qs, {lessonId, unit, accent:{color:unit.color,dark:unit.dark,tint:unit.tint}});
   }
+  // ---------- learning journey: module reader ----------
+  openReader(lid){ if(!READ[lid]) return; AU.play("tap");
+    this.setState({screen:"reader", rd:{ids:[lid]}, popId:null, sheet:null, rdCmp:"all"}, ()=>{ if(this._rdEl) this._rdEl.scrollTop=0; }); }
+  // ELI5 quick pass: every ELI5 block of one week in a single scroll.
+  openQuick(pt){ const ids=[]; pt.secs.forEach(sc=>sc.ch.forEach(cid=>(UNIT[cid].lessons||[]).forEach(l=>{ if(READ[l.id]&&READ[l.id].blocks.some(b=>b.k==="eli5")) ids.push(l.id); })));
+    if(!ids.length) return; AU.play("tap"); this.setState({screen:"reader", rd:{ids, quick:true, title:pt.label+" · ELI5 quick pass"}, popId:null, sheet:null}, ()=>{ if(this._rdEl) this._rdEl.scrollTop=0; }); }
+  markRead(lid){ if(!READ[lid] || this.isRead(lid)) return; const prog=Object.assign({}, this.state.prog);
+    prog.read=Object.assign({}, prog.read); prog.read[lid]=Date.now(); this.bumpStreak(prog); this.save(prog); this.setState({prog}); }
+  readerPractise(lid){ const lm=LMETA[lid]; if(!lm) return; this.markRead(lid); setTimeout(()=>this.startLesson(lm.u, lid), 0); }
+  readerNext(lid){ this.markRead(lid); const nx=this.nextAfter(lid);
+    if(nx && READ[nx.l.id]) setTimeout(()=>this.openReader(nx.l.id), 0); else setTimeout(()=>this.goHome(), 0); }
+  toggleEli5(){ AU.play("select"); this.saveUI({eli5:!this.state.eli5}, {}); if(this._rdEl) this._rdEl.scrollTop=0; }
   startReview(){
     const ids=this.dueIds();
     if(!ids.length){ this.setState({screen:"noreview"}); return; }
@@ -1057,20 +1118,25 @@ class Component extends DCLogic {
   openMistakes(){ AU.play("tap"); this.setState({screen:"mistakes", mOpen:null, mLimit:40, sheet:null, popId:null}, ()=>{ if(this._ms) this._ms.scrollTop=0; }); }
   // Daily session: what's left of each track's quota (or 5 each as a bonus), in alternating sets of five.
   startDaily(only){
-    const per=this.state.per, tt=this.todayT(), used={}, trs=only?TRACKS.filter(t=>t.id===only):TRACKS;
+    const per=this.state.per, tt=this.todayT(), used={}, trs=only?TRACKS.filter(t=>t.id===only):this.dailyT();
     let plan=trs.map(t=>({t, k:Math.max(0, per-(tt[t.id]||0))}));
     if(!plan.some(x=>x.k>0)) plan=trs.map(t=>({t, k:5}));
     const lists=plan.filter(x=>x.k>0).map(x=>this.pickDaily(x.t,x.k,used)).filter(a=>a.length), all=[];
+    // A learning journey with nothing read yet has no questions to offer: open its next module instead.
+    if(!lists.length){ const j=trs.find(t=>t.journey), nx=j&&this.nextLesson(j); if(nx){ this.openReader(nx.l.id); return; } AU.play("nope"); return; }
     while(lists.some(a=>a.length)) lists.forEach(a=>{ all.push.apply(all, a.splice(0,5)); });
     this.begin("daily", all, {lessonId:null, unit:null, accent:{color:C.green,dark:C.greenD,tint:C.greenT}});
   }
+  // Lessons a daily session may draw new questions from. On a learning journey, only modules already read (or practised).
+  dailyLessons(tr){ const a=this.TL[tr.id]||[]; if(!tr.journey) return a;
+    const p=this.state.prog; return a.filter(x=>this.isRead(x.l.id) || (p.lessons[x.l.id]&&p.lessons[x.l.id].plays>0)); }
   // One track's share: its due reviews, then unseen questions in path order, then anything else from the track.
   pickDaily(tr,size,used){
-    const p=this.state.prog, due=this.dueIds().filter(id=>!used[id] && this.trackOf(id)===tr.id);
+    const p=this.state.prog, due=this.dueIds().filter(id=>!used[id] && this.trackOf(id)===tr.id), ls=this.dailyLessons(tr);
     const nRev=Math.min(due.length, Math.max(1,Math.round(size/3)));
     const rev=due.slice(0,nRev).map(id=>this.BYID[id]), fresh=[];
     rev.forEach(q=>{ used[q.id]=1; });
-    for(const x of (this.TL[tr.id]||[])){
+    for(const x of ls){
       if(rev.length+fresh.length>=size) break;
       for(const q of shuffle((this.LES[x.l.id]||[]).filter(q=>!p.q[q.id] && !used[q.id]))){ if(rev.length+fresh.length>=size) break; fresh.push(q); used[q.id]=1; }
     }
@@ -1080,9 +1146,12 @@ class Component extends DCLogic {
     let all=fresh.slice();
     const step=Math.max(1, Math.floor((all.length+revAll.length)/(revAll.length+1)));
     revAll.forEach((q,i)=>all.splice(Math.min(all.length,(i+1)*step+i),0,q));
-    if(all.length<size){ const more=shuffle((this.TQ[tr.id]||[]).filter(q=>!used[q.id])).slice(0,size-all.length); more.forEach(q=>{ used[q.id]=1; }); all=all.concat(more); }
+    const pool=tr.journey ? [].concat.apply([], ls.map(x=>this.LES[x.l.id]||[])) : (this.TQ[tr.id]||[]);
+    if(all.length<size){ const more=shuffle(pool.filter(q=>!used[q.id])).slice(0,size-all.length); more.forEach(q=>{ used[q.id]=1; }); all=all.concat(more); }
     return all;
   }
+  // What a daily row can offer today: false for a journey track with nothing read and nothing due.
+  dailyReady(tr){ if(!tr.journey) return true; return this.dailyLessons(tr).some(x=>this.lessonCount(x.l.id)>0) || this.dueIds().some(id=>this.trackOf(id)===tr.id); }
   openWeekly(id){
     const w=this.weekInfo(id); if(!w.unlocked){ AU.play("nope"); return; }
     const size=this.props.weeklyLength ?? 50, srs=this.state.prog.srs;
@@ -1281,7 +1350,7 @@ class Component extends DCLogic {
 
   resetProgress(){
     if(typeof window!=="undefined" && !window.confirm("Reset all progress, XP, streak, exam results and your review deck? This cannot be undone. Your mistake log is kept."+(this.state.sync?" Sync is on, so your other devices will be reset too.":""))) return;
-    const fresh={ xp:0,streak:0,best:0,lastDay:null,lessons:{},srs:{},totals:{answered:0,correct:0},q:{},days:{},tday:{},wk:{},exams:{} };
+    const fresh={ xp:0,streak:0,best:0,lastDay:null,lessons:{},srs:{},totals:{answered:0,correct:0},q:{},days:{},tday:{},wk:{},exams:{},read:{} };
     this.save(fresh); this.setState({prog:fresh,due:0,screen:"home"});
   }
 
@@ -1298,12 +1367,24 @@ class Component extends DCLogic {
     if(s==="examdone") return this.renderExamDone();
     if(s==="noreview") return this.renderNoReview();
     if(s==="mistakes") return this.renderMistakes();
+    if(s==="reader" && this.state.rd) return this.renderReader();
     return this.renderHome();
   }
-  frame(kids, bg){
+  // Phone layout: one 520px column. Desktop mode: a wider frame (w), with a sidebar on the home screens.
+  frame(kids, bg, w){
+    const dk=this.state.desk;
     return h("div",{style:{position:"fixed",top:0,left:0,right:0,bottom:0,display:"flex",justifyContent:"center",background:"#E9E2D2"}},
-      h("div",{style:{width:"100%",maxWidth:520,height:"100%",display:"flex",flexDirection:"column",background:bg||C.paper,position:"relative",overflow:"hidden",boxShadow:"0 0 70px rgba(60,50,20,.09)",fontFamily:BODY}}, kids));
+      h("div",{style:{width:"100%",maxWidth:dk?(w||860):520,height:"100%",display:"flex",flexDirection:"column",background:bg||C.paper,position:"relative",overflow:"hidden",boxShadow:"0 0 70px rgba(60,50,20,.09)",fontFamily:BODY}}, kids));
   }
+  // Two columns in desktop mode, one stacked column on the phone.
+  cols(left, right, pad){ const P=pad||"18px 16px 32px", st={display:"flex",flexDirection:"column",gap:12,minWidth:0};
+    if(!this.state.desk) return h("div",{style:Object.assign({padding:P},st)}, left.concat(right));
+    return h("div",{style:{padding:"22px 26px 40px",display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:18,alignItems:"start",maxWidth:1040,margin:"0 auto"}},
+      h("div",{style:st}, left), h("div",{style:st}, right)); }
+  deskBtn(){ if(!this.state.wide && !this.state.desk) return null; const dk=this.state.desk;
+    return h("button",{className:"dc-btn","aria-label":dk?"Switch to phone layout":"Switch to desktop mode",title:dk?"Phone layout":"Desktop mode",onClick:()=>this.toggle("desk"),
+      style:{width:36,height:36,borderRadius:11,background:dk?C.greenT:"transparent",border:"1.5px solid "+(dk?C.green:C.line2),display:"flex",alignItems:"center",justifyContent:"center",padding:0,flexShrink:0}},
+      icon(dk?"mobile":"monitor",17,dk?C.greenD:C.ink2,2)); }
   logo(size){ return h("div",{style:{width:size,height:size,borderRadius:size*.3,background:C.green,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 "+Math.round(size/11)+"px 0 "+C.greenD}}, icon("merge",size*.52,"#fff",2.4)); }
   renderLoading(){
     return this.frame(h("div",{style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:22}},
@@ -1344,7 +1425,8 @@ class Component extends DCLogic {
         this.ring(n/g,36,4,C.green,h("span",{style:{fontFamily:HEAD,fontWeight:800,fontSize:11.5,color:n>=g?C.greenD:C.ink2}},String(n)))),
       h("button",{className:"dc-btn","aria-label":this.state.music?"Mute music":"Play music",onClick:()=>this.toggle("music"),
         style:{width:36,height:36,borderRadius:11,background:"transparent",border:"1.5px solid "+C.line2,display:"flex",alignItems:"center",justifyContent:"center",padding:0}},
-        icon(this.state.music?"music":"musicOff",17,this.state.music?C.ink2:C.ink3,2)));
+        icon(this.state.music?"music":"musicOff",17,this.state.music?C.ink2:C.ink3,2)),
+      this.deskBtn());
   }
   learnTop(){
     const tr=this.curTrack();
@@ -1367,11 +1449,19 @@ class Component extends DCLogic {
     let top, body;
     if(tab==="learn"){ top=this.learnTop(); body=this.renderPath(); }
     else { top=this.simpleTop(({daily:"Daily",exams:"Exams",me:"Profile"})[tab]); body= tab==="daily"?this.renderDaily():(tab==="exams"?this.renderExams():this.renderMe()); }
+    if(this.state.desk){
+      const scroll=h("div",{key:"b",className:"dc-scroll",ref:el=>{this._scroll=el;},style:{flex:1,minWidth:0,overflowY:"auto",overflowX:"hidden",position:"relative"}}, body);
+      const main=h("div",{key:"main",style:{flex:1,minWidth:0,display:"flex",flexDirection:"column"}},
+        h("div",{key:"t",style:{flexShrink:0,background:C.paper,borderBottom:"1px solid "+C.line,position:"relative",zIndex:5}}, top),
+        tab==="learn" ? h("div",{key:"lb",style:{flex:1,minHeight:0,display:"flex"}}, scroll, this.renderOutline()) : scroll);
+      return this.frame([h("div",{key:"row",style:{flex:1,minHeight:0,display:"flex"}}, this.renderSide(), main),
+        this.state.sheet==="track" ? this.renderTrackSheet() : null, this.renderWeakSheet()], null, 1320);
+    }
     return this.frame([
       h("div",{key:"t",style:{flexShrink:0,paddingTop:"env(safe-area-inset-top)",background:C.paper,borderBottom:"1px solid "+C.line,position:"relative",zIndex:5}}, top),
       h("div",{key:"b",className:"dc-scroll",ref:el=>{this._scroll=el;},style:{flex:1,overflowY:"auto",overflowX:"hidden",position:"relative",WebkitOverflowScrolling:"touch"}}, body),
       this.renderNav(),
-      this.state.sheet==="track" ? this.renderTrackSheet() : null
+      this.state.sheet==="track" ? this.renderTrackSheet() : null, this.renderWeakSheet()
     ]);
   }
   renderNav(){
@@ -1387,14 +1477,69 @@ class Component extends DCLogic {
           lab);
       }));
   }
+  // Desktop mode: the sidebar (tabs and tracks) and the outline beside the path.
+  renderSide(){
+    const s=this.state, due=s.due, w=this.weekInfo(wkId()), exDot=w.unlocked && !w.rec;
+    const items=[["learn","Learn","map",null],["daily","Daily","target",due>0?String(due>99?"99+":due):null],["exams","Exams","trophy",exDot?"":null],["me","Profile","user",null]];
+    return h("div",{key:"side",className:"dc-scroll",style:{width:240,flexShrink:0,borderRight:"1px solid "+C.line2,background:C.card,display:"flex",flexDirection:"column",gap:3,padding:"16px 12px",overflowY:"auto"}},
+      h("div",{style:{display:"flex",alignItems:"center",gap:10,padding:"4px 8px 18px"}}, this.logo(34), h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:19,color:C.ink,letterSpacing:-.2}},"DealCraft")),
+      items.map(([id,lab,ic,badge])=>{ const on=s.tab===id;
+        return h("button",{key:id,className:"dc-btn dc-row",onClick:()=>this.setTab(id),"aria-current":on?"page":undefined,
+          style:{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"10px 12px",minHeight:46,borderRadius:12,border:"none",background:on?C.greenT:"transparent",color:on?C.greenD:C.ink2,fontFamily:HEAD,fontWeight:800,fontSize:15,textAlign:"left"}},
+          icon(ic,21,on?C.green:C.ink3,2.2), h("span",{style:{flex:1}},lab),
+          badge!=null ? h("span",{style:{minWidth:badge?20:10,height:badge?20:10,padding:badge?"0 6px":0,borderRadius:10,background:badge?C.gold:C.red,color:"#fff",fontSize:11,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}, badge||null) : null); }),
+      h("div",{style:{fontSize:11,fontWeight:800,letterSpacing:.9,color:C.ink3,textTransform:"uppercase",padding:"20px 12px 6px"}},"Tracks"),
+      TRACKS.map(t=>{ const x=this.trackStats(t), on=t.id===s.track && s.tab==="learn";
+        return h("button",{key:t.id,className:"dc-btn dc-row",onClick:()=>{ AU.play("select"); this.saveUI({track:t.id,tab:"learn"},{sheet:null,popId:null}); setTimeout(()=>this.scrollToCurrent(),40); },
+          style:{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 10px",borderRadius:12,border:"none",background:on?"#F5F0E3":"transparent",textAlign:"left",fontFamily:BODY}},
+          h("div",{style:{width:28,height:28,borderRadius:9,background:t.color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:HEAD,fontWeight:800,fontSize:13,flexShrink:0}}, String(t.n)),
+          h("div",{style:{flex:1,minWidth:0}},
+            h("div",{style:{fontFamily:HEAD,fontWeight:700,fontSize:13.5,color:C.ink,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, t.name),
+            h("div",{style:{marginTop:5}}, this.bar(x.n?x.d/x.n:0,t.color,4)))); }),
+      h("div",{style:{flex:1,minHeight:16}}),
+      h("button",{className:"dc-btn dc-row",onClick:()=>this.toggle("desk"),
+        style:{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",minHeight:44,borderRadius:12,border:"1.5px solid "+C.line2,background:"transparent",color:C.ink2,fontFamily:HEAD,fontWeight:700,fontSize:13.5}},
+        icon("mobile",18,C.ink2,2), "Switch to phone layout"));
+  }
+  renderOutline(){
+    const tr=this.curTrack(), nx=this.nextLesson(tr), rows=[];
+    tr.parts.forEach((pt,pi)=>{
+      rows.push(h("button",{key:"p"+pi,className:"dc-btn dc-link",onClick:()=>this.jumpTo(tr.id,pi),
+        style:{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:pi?"18px 4px 6px":"4px 4px 6px",fontFamily:BODY}},
+        h("div",{style:{fontSize:10.5,fontWeight:800,letterSpacing:.9,color:pt.dark||pt.color,textTransform:"uppercase"}}, pt.label),
+        h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:14.5,color:C.ink,lineHeight:1.3,marginTop:1}}, pt.t)));
+      pt.secs.forEach(sc=>sc.ch.forEach(cid=>{ const u=UNIT[cid], ls=u.lessons||[], d=ls.filter(l=>this.isDone(l.id)).length;
+        if(tr.journey && ls.length===1){ rows.push(this.outlineLesson(u, ls[0], nx, this.kicker(u)+" · "+u.title, 6)); return; }
+        rows.push(h("button",{key:"c"+cid,className:"dc-btn dc-row",onClick:()=>this.scrollToChapter(cid),
+          style:{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:"transparent",border:"none",borderRadius:9,padding:"7px 6px",fontFamily:BODY}},
+          h("div",{style:{width:7,height:7,borderRadius:2,background:u.color,flexShrink:0}}),
+          h("span",{style:{flex:1,minWidth:0,fontSize:13,fontWeight:800,color:C.ink,lineHeight:1.3}}, this.kicker(u)+" · "+u.title),
+          h("span",{style:{fontSize:11.5,fontWeight:800,color:d===ls.length&&ls.length?C.greenD:C.ink3,flexShrink:0}}, d+"/"+ls.length)));
+        if(tr.journey) ls.forEach(l=>rows.push(this.outlineLesson(u, l, nx, (l.kind==="module"?l.code+" ":"")+l.t, 21)));
+      }));
+    });
+    return h("div",{key:"ol",className:"dc-scroll",style:{width:310,flexShrink:0,borderLeft:"1px solid "+C.line,overflowY:"auto",padding:"20px 14px 36px",background:"#FDFBF6"}},
+      h("div",{style:{fontSize:11,fontWeight:800,letterSpacing:.9,color:C.ink3,textTransform:"uppercase",margin:"0 4px 8px"}},"Outline · Track "+tr.n),
+      rows);
+  }
+  outlineLesson(u,l,nx,label,indent){ const done=this.isDone(l.id), rd=this.isRead(l.id), cur=!!(nx&&nx.l.id===l.id);
+    return h("button",{key:"l"+l.id,className:"dc-btn dc-row",onClick:()=>{ if(READ[l.id]) this.openReader(l.id); else this.startLesson(u,l.id); },
+      style:{display:"flex",alignItems:"flex-start",gap:8,width:"100%",textAlign:"left",background:cur?u.tint:"transparent",border:"none",borderRadius:9,padding:"6px 6px 6px "+indent+"px",fontFamily:BODY}},
+      h("div",{style:{width:16,height:16,borderRadius:"50%",flexShrink:0,marginTop:1,background:done?u.color:(rd?u.tint:"transparent"),border:"1.5px solid "+(done||rd?u.color:C.line2),display:"flex",alignItems:"center",justifyContent:"center"}},
+        done?icon("check",10,"#fff",3.2):null),
+      h("span",{style:{flex:1,minWidth:0,fontSize:indent<10?13:12.5,fontWeight:indent<10?800:700,color:done?C.ink2:C.ink,lineHeight:1.35}}, label)); }
+  scrollToChapter(cid){ AU.play("tap"); requestAnimationFrame(()=>{ const sc=this._scroll, el=this._chEls&&this._chEls[cid]; if(sc&&el) sc.scrollTop=Math.max(0, el.offsetTop-14); }); }
+  // Bottom sheet on the phone; a centred dialog in desktop mode.
+  sheetWrap(key, onClose, kids, extra){ const dk=this.state.desk;
+    return h("div",{key,onClick:onClose,style:{position:"absolute",top:0,left:0,right:0,bottom:0,background:"rgba(37,39,46,.4)",zIndex:40,display:"flex",flexDirection:"column",justifyContent:dk?"center":"flex-end",alignItems:dk?"center":"stretch",animation:"dc-fade .15s ease"}},
+      h("div",{onClick:e=>e.stopPropagation(),style:Object.assign({background:C.paper,borderRadius:dk?22:"22px 22px 0 0",maxHeight:dk?"84%":"88%",width:dk?"min(580px, calc(100% - 48px))":"auto",animation:"dc-up .22s ease"},extra)}, kids)); }
   renderTrackSheet(){
-    return h("div",{key:"sheet",onClick:()=>this.setState({sheet:null}),style:{position:"absolute",top:0,left:0,right:0,bottom:0,background:"rgba(37,39,46,.4)",zIndex:40,display:"flex",flexDirection:"column",justifyContent:"flex-end",animation:"dc-fade .15s ease"}},
-      h("div",{onClick:e=>e.stopPropagation(),style:{background:C.paper,borderRadius:"22px 22px 0 0",maxHeight:"88%",display:"flex",flexDirection:"column",animation:"dc-up .22s ease"}},
-        h("div",{style:{padding:"10px 16px 2px",flexShrink:0}},
+    return this.sheetWrap("sheet",()=>this.setState({sheet:null}), [
+        h("div",{key:"h",style:{padding:"10px 16px 2px",flexShrink:0}},
           h("div",{style:{width:40,height:5,borderRadius:3,background:C.line2,margin:"0 auto 14px"}}),
           h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:19,color:C.ink}},"Choose a track"),
-          h("div",{style:{fontSize:13,color:C.ink2,marginTop:4,lineHeight:1.5}},"Study both side by side: each day's session takes "+this.state.per+" questions from each track. Tap a part to jump to it.")),
-        h("div",{className:"dc-scroll",style:{overflowY:"auto",padding:"0 16px 22px",paddingBottom:"calc(22px + env(safe-area-inset-bottom))"}},
+          h("div",{style:{fontSize:13,color:C.ink2,marginTop:4,lineHeight:1.5}},"Study them side by side: each day's session takes "+this.state.per+" questions from each track in your daily goal. Tap a part to jump to it.")),
+        h("div",{key:"l",className:"dc-scroll",style:{overflowY:"auto",padding:"0 16px 22px",paddingBottom:"calc(22px + env(safe-area-inset-bottom))"}},
         TRACKS.map(t=>{ const x=this.trackStats(t), on=t.id===this.state.track;
           return h("div",{key:t.id,style:{marginTop:12}},
             h("button",{className:"dc-btn dc-opt",onClick:()=>{ AU.play("select"); this.setTrack(t.id); },
@@ -1413,13 +1558,13 @@ class Component extends DCLogic {
                   h("span",{style:{fontSize:11,fontWeight:800,letterSpacing:.6,color:C.ink3,textTransform:"uppercase",flexShrink:0,width:72}}, pt.label),
                   h("span",{style:{flex:1,minWidth:0,fontSize:14,fontWeight:700,color:C.ink,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, pt.t),
                   h("span",{style:{fontSize:12,fontWeight:800,color:full?C.greenD:C.ink3,flexShrink:0}}, ps.d+"/"+ps.n)); })));
-        }))));
+        }))], {display:"flex",flexDirection:"column"});
   }
 
   // ---------- learn path ----------
   renderPath(){
     const tr=this.curTrack(), nx=this.nextLesson(tr), out=[];
-    this._curEl=null; this._partEls={};
+    this._curEl=null; this._partEls={}; this._chEls={};
     const line=k=>h("div",{key:k,style:{flex:1,height:2,background:C.line2,borderRadius:1}});
     tr.parts.forEach((pt,pi)=>{
       out.push(this.partHeader(tr,pt,pi));
@@ -1433,22 +1578,58 @@ class Component extends DCLogic {
         out.push(this.secExamNode(tr,pi,si));
       });
     });
-    out.push(h("div",{key:"end",style:{textAlign:"center",fontSize:12.5,color:C.ink3,fontWeight:700,padding:"0 20px"}}, "End of Track "+tr.n+". Switch tracks from the top bar."));
-    return h("div",{style:{padding:"20px 16px 40px"}}, out);
+    out.push(h("div",{key:"end",style:{textAlign:"center",fontSize:12.5,color:C.ink3,fontWeight:700,padding:"0 20px"}}, "End of Track "+tr.n+". Switch tracks from the "+(this.state.desk?"sidebar.":"top bar.")));
+    return h("div",{style:{padding:this.state.desk?"26px 24px 48px":"20px 16px 40px",maxWidth:this.state.desk?640:undefined,margin:this.state.desk?"0 auto":undefined}}, out);
   }
   partHeader(tr,pt,pi){
-    const x=this.partStats(tr,pi);
+    const x=this.partStats(tr,pi), ab=tr.journey && pt.about, g=!!this.state.guide["pt:"+pt.id], wk=tr.journey ? Array.from(new Set([].concat.apply([], this.weakTags(pt).map(t=>t.ids)))) : [];
+    const chip=(lab,ic,on,fn)=>h("button",{key:lab,className:"dc-btn dc-chip",onClick:fn,
+      style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",minHeight:38,borderRadius:11,border:"2px solid "+(on?pt.color:C.line2),background:on?(pt.tint||C.card):C.card,color:on?(pt.dark||pt.color):C.ink2,fontFamily:HEAD,fontWeight:800,fontSize:13,boxShadow:"0 2px 0 "+(on?pt.color:C.line2)}},
+      icon(ic,15,on?(pt.dark||pt.color):C.ink2,2.3), lab);
     return h("div",{key:"pt"+pi,ref:el=>{ this._partEls[pi]=el; },style:{margin:pi?"4px 0 24px":"0 0 24px",paddingTop:pi?26:0,borderTop:pi?"2px solid "+C.line2:"none"}},
       h("div",{style:{fontSize:11.5,fontWeight:800,letterSpacing:1,color:pt.dark||pt.color,textTransform:"uppercase"}}, pt.label),
       h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:25,color:C.ink,letterSpacing:-.3,lineHeight:1.15,marginTop:3}}, pt.t),
+      pt.full ? h("div",{style:{fontFamily:HEAD,fontWeight:600,fontSize:15,color:C.ink2,lineHeight:1.35,marginTop:3}}, pt.full) : null,
       pt.sub ? h("div",{style:{fontSize:13.5,color:C.ink2,lineHeight:1.5,marginTop:6,textWrap:"pretty"}}, pt.sub) : null,
       h("div",{style:{display:"flex",alignItems:"center",gap:10,marginTop:12}},
         h("div",{style:{flex:1}}, this.bar(x.n?x.d/x.n:0, pt.color, 6)),
-        h("span",{style:{fontSize:12,fontWeight:800,color:C.ink3,whiteSpace:"nowrap"}}, x.d+" of "+x.n+" lessons")));
+        h("span",{style:{fontSize:12,fontWeight:800,color:C.ink3,whiteSpace:"nowrap"}}, x.d+" of "+x.n+" lessons")),
+      tr.journey ? h("div",{style:{display:"flex",flexWrap:"wrap",gap:8,marginTop:12}},
+        chip("ELI5 quick pass","star",false,()=>this.openQuick(pt)),
+        wk.length ? chip("Weak spots · "+wk.length,"target",false,()=>{ AU.play("tap"); this.setState({sheet:"weak:"+pt.id}); }) : null,
+        ab ? chip("Sources & notes","book",g,()=>{ AU.play("tap"); const o=Object.assign({},this.state.guide); o["pt:"+pt.id]=!g; this.setState({guide:o}); }) : null) : null,
+      (ab && g) ? this.aboutCard(pt) : null);
+  }
+  // Weak spots for a week: questions still on the to-fix list, grouped by tag, most missed first.
+  weakTags(pt){ const m=this.state.mist, hid=m.hidden, by={};
+    Object.keys(m.items).forEach(id=>{ const q=this.BYID&&this.BYID[id], lm=q&&LMETA[q.lesson], it=m.items[id];
+      if(!q || !lm || lm.pt!==pt || hid[id] || isFixed(it)) return;
+      (q.tags||[]).forEach(t=>{ const k=t.toLowerCase(), e=by[k]||(by[k]={t, ids:[], n:0}); e.ids.push(id); e.n+=it.n||1; }); });
+    return Object.keys(by).map(k=>by[k]).sort((a,b)=>(b.ids.length-a.ids.length)||(b.n-a.n)||a.t.localeCompare(b.t)); }
+  renderWeakSheet(){ const sh=this.state.sheet; if(!sh || sh.indexOf("weak:")!==0) return null;
+    const tr=TRACKS.find(t=>t.journey), pt=tr && tr.parts.find(p=>p.id===sh.slice(5)); if(!pt) return null;
+    const tags=this.weakTags(pt), all=Array.from(new Set([].concat.apply([], tags.map(t=>t.ids))));
+    const rows=tags.slice(0,30).map(t=>h("button",{key:t.t,className:"dc-btn dc-row",onClick:()=>{ this.setState({sheet:null}); this.startMistakes(t.ids); },
+      style:{display:"flex",alignItems:"center",gap:12,width:"100%",textAlign:"left",background:"transparent",border:"none",borderTop:"1px solid "+C.line,padding:"12px 4px",minHeight:52,fontFamily:BODY}},
+      h("div",{style:{minWidth:34,height:26,padding:"0 8px",borderRadius:13,background:C.redT,color:C.redD,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:HEAD,fontWeight:800,fontSize:12.5,flexShrink:0}}, String(t.ids.length)),
+      h("div",{style:{flex:1,minWidth:0,fontSize:15,fontWeight:700,color:C.ink}}, t.t),
+      icon("play",13,C.goldD,2,true)));
+    return this.sheetEl("weak", pt.label+" weak spots", "Questions you missed and haven't fixed yet, grouped by topic tag. Tap a tag to practise just those.",
+      [h("div",{key:"rows"}, rows),
+       h("div",{key:"go",style:{marginTop:14,display:"flex",flexDirection:"column",gap:8}},
+         this.btn("Practise all "+Math.min(20,all.length), ()=>{ this.setState({sheet:null}); this.startMistakes(all); }, {full:true,bg:C.gold,dark:C.goldD,icon:icon("play",15,"#fff",2,true)}),
+         this.btn("Close", ()=>this.setState({sheet:null}), {full:true,bg:C.card,color:C.ink2,dark:C.line2,border:C.line2}))]); }
+  // A week's "Sources & notes": what the notes were built from, abbreviations, and the source-coverage check.
+  aboutCard(pt){ const a=pt.about, ac={color:pt.color,dark:pt.dark,tint:pt.tint};
+    const lab=t=>h("div",{style:{fontSize:10.5,fontWeight:800,letterSpacing:1,color:C.ink3,textTransform:"uppercase",margin:"14px 0 6px"}},t);
+    return h("div",{style:{background:C.card,border:"1px solid "+C.line2,borderRadius:16,padding:"14px 16px 16px",marginTop:12,animation:"dc-up .18s ease"}},
+      a.built ? h("div",null, lab("Built from"), h("div",{style:{fontSize:13.5,color:C.ink,lineHeight:1.55}}, rich(a.built))) : null,
+      (a.secs||[]).map((sc,i)=>h("div",{key:i}, lab(sc.title), this.rnodes(sc.n, ac, "ab"+i, 13.5))),
+      a.abbr ? h("div",null, lab("Abbreviations"), h("div",{style:{fontSize:13,color:C.ink2,lineHeight:1.6}}, rich(a.abbr))) : null);
   }
   chapterBanner(u){
     const g=!!this.state.guide[u.id];
-    return h("div",{key:"ch"+u.id,style:{background:u.dark,borderRadius:16,padding:"14px 12px 14px 16px",color:"#fff",margin:"4px 0 30px",boxShadow:"0 4px 0 rgba(0,0,0,.22)",display:"flex",alignItems:"flex-start",gap:12}},
+    return h("div",{key:"ch"+u.id,ref:el=>{ if(this._chEls) this._chEls[u.id]=el; },style:{background:u.dark,borderRadius:16,padding:"14px 12px 14px 16px",color:"#fff",margin:"4px 0 30px",boxShadow:"0 4px 0 rgba(0,0,0,.22)",display:"flex",alignItems:"flex-start",gap:12}},
       h("div",{style:{flex:1,minWidth:0}},
         h("div",{style:{fontSize:11,fontWeight:800,letterSpacing:.8,textTransform:"uppercase",opacity:.9}}, u.part.label+" · "+this.kicker(u)),
         h("div",{style:{fontFamily:HEAD,fontWeight:700,fontSize:18,lineHeight:1.25,marginTop:3}}, u.title),
@@ -1460,11 +1641,13 @@ class Component extends DCLogic {
   pathNode(u,l,i,nx){
     const p=this.state.prog, st=p.lessons[l.id], done=this.isDone(l.id), cur=!!(nx&&nx.l.id===l.id), n=this.lessonCount(l.id);
     const seen=Math.min(this.seen()[l.id]||0,n), frac=n?seen/n:0, crowns=(st&&st.crowns)||0, open=this.state.popId===l.id;
-    const on=done||cur, size=cur?74:66;
+    const on=done||cur, size=cur?74:66, rdr=!!READ[l.id], go=n>0||rdr, rd=rdr&&this.isRead(l.id);
     const bg=on?u.color:"#E4DED0", dk=on?u.dark:"#CBC4B3", fg=on?"#fff":"#A8A18F";
-    const btn=h("button",{className:"dc-btn dc-node","aria-label":l.code+" "+l.t,disabled:!n,onClick:()=>{ AU.play("tap"); this.setState({popId:open?null:l.id}); },
+    const btn=h("button",{className:"dc-btn dc-node","aria-label":lessonLabel(l)+" "+l.t,disabled:!go,onClick:()=>{ AU.play("tap"); this.setState({popId:open?null:l.id}); },
       style:{width:size,height:size-4,borderRadius:"50%",background:bg,boxShadow:"0 6px 0 "+dk,border:"none",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",zIndex:2,padding:0}},
-      icon(n?l.ic:"lock",cur?32:28,fg,2.3),
+      icon(go?l.ic:"lock",cur?32:28,fg,2.3),
+      (rd && n>0 && !done) ? h("div",{title:"Read",style:{position:"absolute",left:-5,bottom:-7,width:25,height:25,borderRadius:13,background:C.card,border:"2.5px solid "+C.paper,boxShadow:"0 0 0 1.5px "+u.color,display:"flex",alignItems:"center",justifyContent:"center"}},
+        icon("read",12,u.dark,2.3)) : null,
       crowns>0 ? h("div",{style:{position:"absolute",right:-5,bottom:-7,minWidth:25,height:25,borderRadius:13,background:C.gold,border:"2.5px solid "+C.paper,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:1,fontFamily:HEAD,fontWeight:800,fontSize:11,padding:"0 4px"}},
         icon("crown",11,"#fff",2,true), crowns>1?String(crowns):null) : null);
     const ringed=((frac>0&&!done)||cur)
@@ -1474,7 +1657,7 @@ class Component extends DCLogic {
     const pulse=cur&&!open ? h("div",{style:{position:"absolute",top:0,left:0,right:0,bottom:0,borderRadius:"50%",border:"3px solid "+u.color,animation:"dc-pulse 1.9s ease-out infinite",pointerEvents:"none"}}) : null;
     const bubble=cur&&!open ? h("div",{style:{position:"absolute",top:-46,left:-40,right:-40,display:"flex",justifyContent:"center",pointerEvents:"none",zIndex:3}},
       h("div",{style:{animation:"dc-bob 1.6s ease-in-out infinite",position:"relative"}},
-        h("div",{style:{background:C.card,border:"2px solid "+C.line2,borderRadius:12,padding:"6px 13px",fontFamily:HEAD,fontWeight:800,fontSize:13,letterSpacing:.7,color:u.dark,whiteSpace:"nowrap"}}, frac>0?"CONTINUE":"START"),
+        h("div",{style:{background:C.card,border:"2px solid "+C.line2,borderRadius:12,padding:"6px 13px",fontFamily:HEAD,fontWeight:800,fontSize:13,letterSpacing:.7,color:u.dark,whiteSpace:"nowrap"}}, (rdr&&!rd)?"READ":(frac>0?"CONTINUE":(rdr?"PRACTISE":"START"))),
         h("div",{style:{position:"absolute",bottom:-6,left:"50%",marginLeft:-6,width:12,height:12,background:C.card,borderRight:"2px solid "+C.line2,borderBottom:"2px solid "+C.line2,transform:"rotate(45deg)"}}))) : null;
     return h("div",{key:l.id,ref:cur?(el=>{ this._curEl=el; }):undefined,style:{display:"flex",justifyContent:"center",marginBottom:18,marginTop:cur?(i===0?40:52):0,transform:"translateX("+OFF[i%8]+"px)",position:"relative"}},
       h("div",{style:{position:"relative"}}, pulse, bubble, ringed));
@@ -1485,6 +1668,7 @@ class Component extends DCLogic {
     const status= done ? ((st&&st.plays) ? "Best score "+best+"%"+(st.crowns?" · Crown level "+st.crowns:"") : "Every question seen in daily sessions")
       : cur ? (seen? seen+" of "+n+" questions seen" : "Up next on your path") : "Ahead of your path. You can start it now.";
     const bg=on?u.dark:C.card, fg=on?"#fff":C.ink;
+    if(READ[l.id]) return this.journeyPop(u,l,i,{done,cur,n,seen,st,best,on,bg,fg});
     return h("div",{key:"pop"+l.id,style:{position:"relative",margin:"-2px 2px 26px",animation:"dc-up .18s ease"}},
       h("div",{style:{position:"absolute",top:-7,left:"calc(50% + "+OFF[i%8]+"px - 8px)",width:16,height:16,background:bg,transform:"rotate(45deg)",borderRadius:3,border:on?"none":"2px solid "+C.line2,borderRight:"none",borderBottom:"none"}}),
       h("div",{style:{position:"relative",background:bg,border:on?"none":"2px solid "+C.line2,borderRadius:16,padding:"15px 16px 16px",color:fg,boxShadow:"0 4px 0 "+(on?"rgba(0,0,0,.22)":C.line2)}},
@@ -1493,6 +1677,25 @@ class Component extends DCLogic {
         h("div",{style:{fontSize:13,marginTop:5,color:on?"#fff":C.ink2}}, status),
         h("div",{style:{marginTop:13}}, this.btn(done?"Practise again":(cur?(seen?"Continue":"Start lesson"):"Start anyway"), ()=>this.startLesson(u,l.id),
           {full:true, bg:on?"#fff":u.color, color:on?u.dark:"#fff", dark:on?"rgba(0,0,0,.25)":u.dark}))));
+  }
+  // Popover for a learning-journey lesson: read the module first, then practise.
+  journeyPop(u,l,i,x){
+    const rd=this.isRead(l.id), n=x.n, on=x.on, noun=l.kind==="module"?"module":"stage";
+    const status= x.done ? ((x.st&&x.st.plays) ? "Best score "+x.best+"%"+(x.st.crowns?" · Crown level "+x.st.crowns:"") : (n?"Every question seen in daily sessions":"Read"))
+      : rd ? (n ? "Read · practise the "+n+" questions to finish this "+noun : "Read")
+      : x.cur ? (n ? "Up next. Read the "+noun+" first, then practise." : "Up next on your journey") : "Ahead of your path. You can start it now.";
+    const main= (!rd || !n) ? [rd?"Read again":"Read "+noun, ()=>this.openReader(l.id), "read"] : [x.done?"Practise again":(x.seen?"Continue practice":"Practise "+n+" questions"), ()=>this.startLesson(u,l.id), "play"];
+    const alt= (rd && n) ? ["Read again", ()=>this.openReader(l.id)] : ((!rd && n) ? ["Skip to the questions", ()=>this.startLesson(u,l.id)] : null);
+    const ic=main[2]==="read" ? icon("read",17,on?u.dark:"#fff",2.3) : icon("play",14,on?u.dark:"#fff",2,true);
+    return h("div",{key:"pop"+l.id,style:{position:"relative",margin:"-2px 2px 26px",animation:"dc-up .18s ease"}},
+      h("div",{style:{position:"absolute",top:-7,left:"calc(50% + "+OFF[i%8]+"px - 8px)",width:16,height:16,background:x.bg,transform:"rotate(45deg)",borderRadius:3,border:on?"none":"2px solid "+C.line2,borderRight:"none",borderBottom:"none"}}),
+      h("div",{style:{position:"relative",background:x.bg,border:on?"none":"2px solid "+C.line2,borderRadius:16,padding:"15px 16px 16px",color:x.fg,boxShadow:"0 4px 0 "+(on?"rgba(0,0,0,.22)":C.line2)}},
+        h("div",{style:{fontSize:11,fontWeight:800,letterSpacing:.8,textTransform:"uppercase",color:on?"#fff":C.ink3,opacity:on?.9:1}}, lessonLabel(l)+" · "+(n?n+" questions":"reading")),
+        h("div",{style:{fontFamily:HEAD,fontWeight:700,fontSize:18,lineHeight:1.25,marginTop:3}}, l.t),
+        h("div",{style:{fontSize:13,marginTop:5,color:on?"#fff":C.ink2}}, status),
+        h("div",{style:{marginTop:13,display:"flex",flexDirection:"column",gap:8}},
+          this.btn(main[0], main[1], {full:true, icon:ic, bg:on?"#fff":u.color, color:on?u.dark:"#fff", dark:on?"rgba(0,0,0,.25)":u.dark}),
+          alt ? this.btn(alt[0], alt[1], {full:true, upper:false, fs:14.5, bg:"transparent", color:on?"#fff":u.dark, dark:"transparent", border:on?"rgba(255,255,255,.55)":C.line2}) : null)));
   }
   secExamNode(tr,pi,si){
     const ps=this.secState(tr,pi,si), rec=ps.rec, passed=!!(rec&&rec.passed), u=UNIT[ps.sc.ch[0]], open=ps.unlocked||passed, name=this.secName(tr,pi,si)+" exam";
@@ -1508,19 +1711,169 @@ class Component extends DCLogic {
       h("div",{style:{fontSize:12.5,color:passed?C.goldD:C.ink3,fontWeight:700,marginTop:2}}, status));
   }
 
+  // ---------- learning journey: reader ----------
+  renderReader(){
+    const s=this.state, rd=s.rd, quick=!!rd.quick, eli=quick||s.eli5, dk=s.desk, lid=rd.ids[0], lm=LMETA[lid], L=READ[lid];
+    if(!lm||!L) return this.renderHome();
+    const u=lm.u, l=lm.l, pt=lm.pt, ac={color:u.color,dark:u.dark,tint:u.tint}, n=quick?0:this.lessonCount(lid), nx=quick?null:this.nextAfter(lid);
+    const all=L.blocks, two=dk && !eli && !all.some(b=>b.k==="h"||b.k==="cmp") && all.some(b=>b.k==="obj"||b.k==="big"||b.k==="traps");
+    const kick=quick ? rd.title : pt.label+" · "+this.kicker(u)+(l.kind==="module"?" · Module "+l.code:(l.kind==="overview"?" · Overview":""));
+    const top=h("div",{key:"top",style:{display:"flex",alignItems:"center",gap:12,padding:"12px 16px 10px",paddingTop:"calc(12px + env(safe-area-inset-top))",borderBottom:"1px solid "+C.line,flexShrink:0,background:C.paper}},
+      h("button",{className:"dc-btn","aria-label":"Close",onClick:()=>this.goHome(),style:{background:"none",border:"none",padding:6,margin:-6,display:"flex"}}, icon("x",26,C.ink3,2.4)),
+      h("div",{style:{flex:1,minWidth:0,fontSize:11.5,fontWeight:800,letterSpacing:.8,color:ac.dark,textTransform:"uppercase",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, kick),
+      quick ? null : h("button",{className:"dc-btn dc-chip",onClick:()=>this.toggleEli5(),"aria-pressed":s.eli5,title:"Show only the plain-English (ELI5) blocks",
+        style:{display:"flex",alignItems:"center",gap:7,padding:"6px 8px 6px 11px",minHeight:38,borderRadius:12,border:"2px solid "+(s.eli5?ac.color:C.line2),background:s.eli5?ac.tint:C.card,fontFamily:HEAD,fontWeight:800,fontSize:12.5,color:s.eli5?ac.dark:C.ink2,flexShrink:0}},
+        "ELI5 only", h("div",{style:{transform:"scale(.78)",transformOrigin:"right center",marginLeft:-6}}, this.switchEl(s.eli5))));
+    let body;
+    if(quick){
+      body=rd.ids.map((id,i)=>{ const m=LMETA[id], B=READ[id].blocks.filter(b=>b.k==="eli5"||b.k==="h");
+        return h("div",{key:id,style:{marginTop:i?26:0}},
+          h("div",{style:{fontSize:11,fontWeight:800,letterSpacing:.8,color:m.u.dark,textTransform:"uppercase"}}, this.kicker(m.u)+(m.l.kind==="module"?" · Module "+m.l.code:"")),
+          h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:19,color:C.ink,lineHeight:1.25,margin:"2px 0 10px"}}, m.l.t),
+          h("div",{style:{display:"flex",flexDirection:"column",gap:10}}, B.map((b,bi)=>this.readerBlock(b,{color:m.u.color,dark:m.u.dark,tint:m.u.tint},id+":"+bi,id))),
+          h("button",{className:"dc-btn dc-link",onClick:()=>this.openReader(id),style:{display:"inline-flex",alignItems:"center",gap:5,marginTop:8,background:"none",border:"none",padding:"8px 0",fontFamily:HEAD,fontWeight:800,fontSize:13.5,color:m.u.dark,minHeight:40}},
+            "Read the full "+(m.l.kind==="module"?"module":"stage"), icon("chevron",14,m.u.dark,2.6))); });
+    } else {
+      const shown=all.map((b,bi)=>({b,bi})).filter(x=>!eli || x.b.k==="eli5" || x.b.k==="h");
+      const mins=Math.max(1, Math.round(JSON.stringify(all).length/1300));
+      const head=h("div",{key:"hd",style:{marginBottom:16}},
+        h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:dk?30:26,color:C.ink,letterSpacing:-.3,lineHeight:1.15,textWrap:"pretty"}}, l.t),
+        h("div",{style:{display:"flex",flexWrap:"wrap",alignItems:"center",gap:"4px 12px",marginTop:8,fontSize:12.5,fontWeight:800,color:C.ink3}},
+          h("span",{style:{display:"inline-flex",alignItems:"center",gap:5}}, icon("clock",14,C.ink3,2.2), "About "+mins+" min read"),
+          n ? h("span",{style:{display:"inline-flex",alignItems:"center",gap:5}}, icon("cards",14,C.ink3,2.2), n+" practice questions") : null,
+          this.isRead(lid) ? h("span",{style:{display:"inline-flex",alignItems:"center",gap:5,color:C.greenD}}, icon("check",14,C.green,3), "Read") : null),
+        eli ? h("div",{style:{marginTop:12,fontSize:13,color:ac.dark,background:ac.tint,borderRadius:12,padding:"9px 12px",fontWeight:700,lineHeight:1.45}}, "ELI5 only: the plain-English versions, for a quick first pass. Turn it off for the rules, authorities and traps.") : null);
+      const el=x=>this.readerBlock(x.b,ac,lid+":"+x.bi,lid);
+      if(two){ const side=x=>x.b.k==="obj"||x.b.k==="big"||x.b.k==="traps";
+        body=[head, h("div",{key:"g",style:{display:"grid",gridTemplateColumns:"minmax(0,1fr) 340px",gap:20,alignItems:"start"}},
+          h("div",{style:{display:"flex",flexDirection:"column",gap:12,minWidth:0}}, shown.filter(x=>!side(x)).map(el)),
+          h("div",{style:{display:"flex",flexDirection:"column",gap:12,position:"sticky",top:0}}, shown.filter(side).map(el)))];
+      } else body=[head, h("div",{key:"b",style:{display:"flex",flexDirection:"column",gap:12}}, shown.map(el))];
+    }
+    const wide=two || all.some(b=>b.k==="cmp");
+    const content=h("div",{key:"c",className:"dc-scroll",ref:el=>{ this._rdEl=el; },onScroll:quick||eli?undefined:(e=>{ const t=e.currentTarget; if(t.scrollTop+t.clientHeight>=t.scrollHeight-40) this.markRead(lid); }),
+      style:{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}},
+      h("div",{style:{padding:dk?"26px 30px 40px":"18px 18px 30px",maxWidth:dk?(wide?1120:780):undefined,margin:"0 auto"}}, body));
+    let cta;
+    if(quick) cta=this.btn("Done", ()=>this.goHome(), {full:true,bg:ac.color,dark:ac.dark});
+    else if(n) cta=this.btn("Practise "+n+" questions", ()=>this.readerPractise(lid), {full:true,bg:ac.color,dark:ac.dark,icon:icon("play",14,"#fff",2,true)});
+    else cta=this.btn(nx&&READ[nx.l.id] ? "Next: "+lessonLabel(nx.l) : "Finish", ()=>this.readerNext(lid), {full:true,bg:ac.color,dark:ac.dark,icon:icon("arrow",18,"#fff",2.4)});
+    const foot=h("div",{key:"f",style:{borderTop:"1px solid "+C.line,background:C.paper,padding:"12px 16px 14px",paddingBottom:"calc(14px + env(safe-area-inset-bottom))",flexShrink:0}},
+      h("div",{style:{maxWidth:dk?520:undefined,margin:"0 auto"}}, cta));
+    return this.frame([top, content, foot], null, 1180);
+  }
+  readerBlock(b,ac,k,lid){
+    const lab=(t,ic,col,fill)=>h("div",{style:{display:"flex",alignItems:"center",gap:7,fontSize:11,fontWeight:800,letterSpacing:1,color:col,textTransform:"uppercase",marginBottom:8}}, icon(ic,15,col,2.3,fill), t);
+    if(b.k==="obj") return h("div",{key:k,style:{background:C.card,border:"1px solid "+C.line2,borderRadius:16,padding:"13px 15px"}},
+      lab("Objective","target",C.ink3), h("div",{style:{fontSize:15,color:C.ink,lineHeight:1.55,fontWeight:600}}, rich(b.t,k)));
+    if(b.k==="big") return h("div",{key:k,style:{background:C.goldT,borderRadius:16,padding:"13px 15px",border:"1.5px solid #F1D79A"}},
+      lab("Big idea","zap",C.goldD,true), h("div",{style:{fontFamily:HEAD,fontSize:16.5,color:C.ink,lineHeight:1.5,fontWeight:600}}, rich(b.t,k)));
+    if(b.k==="eli5") { const story=/Wrap-up/.test((READ[lid]||{}).t||"");
+      return h("div",{key:k,style:{background:ac.tint,borderRadius:16,padding:"14px 16px 15px",border:"1.5px solid "+ac.color}},
+        lab(story?"The whole topic as one story":"ELI5 · in plain English","star",ac.dark,true), this.rnodes(b.n,ac,k,15.5)); }
+    if(b.k==="h"){ const m=/^(Module [\d.]+):\s*(.*)$/.exec(b.t)||[null,"",b.t];
+      return h("div",{key:k,style:{marginTop:14,paddingTop:14,borderTop:"2px solid "+C.line2}},
+        m[1] ? h("div",{style:{fontSize:11.5,fontWeight:800,letterSpacing:1,color:ac.dark,textTransform:"uppercase"}}, m[1]) : null,
+        h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:21,color:C.ink,lineHeight:1.2,marginTop:2}}, m[2])); }
+    if(b.k==="traps") return h("div",{key:k,style:{background:C.redT,borderRadius:16,padding:"13px 15px 14px",border:"1.5px solid #F2C4C3"}},
+      lab("Traps","x",C.redD), this.rnodes(b.n,ac,k,14.5,"trap"));
+    if(b.k==="flow") return this.renderFlow(b,ac,k);
+    if(b.k==="cmp") return this.renderCmp(b,ac,k);
+    // "sec": Rules & authorities and other titled lists. Top-level points with sub-points fold.
+    const keys=[]; (b.n||[]).forEach((nd,ni)=>(nd.ul||nd.ol||[]).forEach((it,i)=>{ if(it.c&&it.c.length) keys.push(k+"."+ni+"."+i); }));
+    const anyOpen=keys.some(x=>!this.state.rdFold[x]);
+    return h("div",{key:k,style:{background:C.card,border:"1px solid "+C.line2,borderRadius:16,padding:"14px 15px 15px"}},
+      h("div",{style:{display:"flex",alignItems:"flex-start",gap:10,marginBottom:b.sub?4:10}},
+        h("div",{style:{flex:1,minWidth:0,fontFamily:HEAD,fontWeight:800,fontSize:16.5,color:C.ink,lineHeight:1.3}}, rich(b.title||"Rules & authorities",k+"t")),
+        keys.length>1 ? h("button",{className:"dc-btn dc-link",onClick:()=>this.foldAll(keys,anyOpen),style:{background:"none",border:"none",padding:"2px 0",fontFamily:HEAD,fontWeight:800,fontSize:12.5,color:ac.dark,flexShrink:0,minHeight:28}}, anyOpen?"Collapse all":"Expand all") : null),
+      b.sub ? h("div",{style:{display:"flex",gap:6,alignItems:"flex-start",fontSize:12.5,color:C.ink3,fontWeight:700,lineHeight:1.45,marginBottom:11}}, h("span",{style:{flexShrink:0,marginTop:1}},icon("book",13,C.ink3,2.2)), h("span",null,rich(b.sub,k+"s"))) : null,
+      this.rnodes(b.n,ac,k,14.5,"sec"));
+  }
+  fold(kk){ AU.play("tap"); const f=Object.assign({},this.state.rdFold); if(f[kk]) delete f[kk]; else f[kk]=true; this.setState({rdFold:f}); }
+  foldAll(keys,on){ AU.play("tap"); const f=Object.assign({},this.state.rdFold); keys.forEach(x=>{ if(on) f[x]=true; else delete f[x]; }); this.setState({rdFold:f}); }
+  badge(b){ const x=BADGE[b]; if(!x) return null;
+    return h("span",{key:"bd"+b,style:{display:"inline-block",marginLeft:7,padding:"1px 8px",borderRadius:999,background:x[1],color:x[2],fontFamily:HEAD,fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:"uppercase",verticalAlign:"1px",whiteSpace:"nowrap",lineHeight:"18px"}}, x[0]); }
+  rnodes(ns,ac,k,fs,fk){
+    return h("div",{key:k,style:{display:"flex",flexDirection:"column",gap:10}}, (ns||[]).map((nd,i)=> nd.p!=null
+      ? h("div",{key:i,style:{fontSize:fs,color:C.ink,lineHeight:1.6,textWrap:"pretty"}}, rich(nd.p,k+"p"+i))
+      : this.rlist(nd,ac,k+"."+i,fs,0,fk))); }
+  rlist(nd,ac,k,fs,d,fk){
+    const ol=!!nd.ol, items=nd.ol||nd.ul||[], trap=fk==="trap", count=x=>(x.ul||x.ol||[]).reduce((a,it)=>a+1+(it.c||[]).reduce((b,c)=>b+count(c),0),0);
+    return h("div",{key:k,style:{display:"flex",flexDirection:"column",gap:d?6:10,marginTop:d?7:0}}, items.map((it,i)=>{
+      const kk=k+"."+i, kids=it.c||[], foldable=fk==="sec" && d===0 && kids.length>0, folded=foldable && !!this.state.rdFold[kk];
+      const mark= trap ? h("div",{style:{width:20,height:20,borderRadius:"50%",background:C.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2}}, icon("x",11,"#fff",3.2))
+        : ol ? h("div",{style:{minWidth:22,height:22,borderRadius:"50%",background:d?"#EDE7D8":ac.color,color:d?C.ink2:"#fff",fontFamily:HEAD,fontWeight:800,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}, String(i+1))
+        : h("div",{style:{width:d?5:7,height:d?5:7,borderRadius:"50%",background:d?C.ink3:ac.color,flexShrink:0,marginTop:d?9:8}});
+      const text=h("div",{style:{fontSize:d?fs-.5:fs,color:C.ink,lineHeight:1.55,textWrap:"pretty"}}, rich(it.t,kk), (it.b||[]).map(b=>this.badge(b)));
+      return h("div",{key:kk,style:{display:"flex",gap:10,alignItems:"flex-start"}}, mark,
+        h("div",{style:{flex:1,minWidth:0}},
+          foldable ? h("div",{role:"button",tabIndex:0,onClick:()=>this.fold(kk),onKeyDown:e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); this.fold(kk); } },"aria-expanded":!folded,
+              style:{display:"flex",gap:8,alignItems:"flex-start",cursor:"pointer"}},
+              h("div",{style:{flex:1,minWidth:0}}, text),
+              h("div",{style:{display:"flex",transform:folded?"none":"rotate(90deg)",transition:"transform .15s",marginTop:3,flexShrink:0}}, icon("chevron",15,C.ink3,2.4))) : text,
+          folded ? h("div",{style:{fontSize:12,color:C.ink3,fontWeight:700,marginTop:3}}, kids.reduce((a,c)=>a+count(c),0)+" more points") : kids.map((c,ci)=>this.rlist(c,ac,kk+"c"+ci,fs,d+1,fk))));
+    })); }
+  // A mermaid flowchart from the notes, drawn as an indented decision tree. Shared outcomes repeat where they are reached.
+  renderFlow(b,ac,k){
+    const g=b.g, out={}; g.edges.forEach(e=>{ (out[e[0]]=out[e[0]]||[]).push(e); });
+    const box=id=>{ const nd=g.nodes[id]||{t:id}, end=!(out[id]&&out[id].length);
+      return h("div",{style:{background:nd.q?ac.tint:(end?C.card:"#F5F0E3"),border:"1.5px solid "+(nd.q?ac.color:C.line2),borderRadius:11,padding:"9px 12px",fontSize:13.5,lineHeight:1.45,fontWeight:nd.q?800:600,color:nd.q?ac.dark:C.ink,fontFamily:nd.q?HEAD:BODY}}, nd.t); };
+    const walk=(id,path,kk)=>{ const kids=out[id]||[];
+      if(path.indexOf(id)>=0 || !kids.length) return [h("div",{key:kk},box(id))];
+      const p2=path.concat([id]);
+      if(kids.length===1 && !kids[0][2]) return [h("div",{key:kk},box(id)), h("div",{key:kk+"a",style:{width:2,height:12,background:C.line2,marginLeft:18}})].concat(walk(kids[0][1],p2,kk+"0"));
+      return [h("div",{key:kk},box(id)), h("div",{key:kk+"k",style:{marginLeft:10,paddingLeft:14,borderLeft:"2px solid "+C.line2,display:"flex",flexDirection:"column",gap:12,marginTop:10}},
+        kids.map((e,i)=>h("div",{key:i},
+          e[2] ? h("div",{style:{display:"inline-block",fontSize:11.5,fontWeight:800,color:ac.dark,background:C.card,border:"1.5px solid "+ac.color,borderRadius:9,padding:"2px 9px",marginBottom:6,lineHeight:1.4}}, e[2]) : null,
+          h("div",{style:{display:"flex",flexDirection:"column"}}, walk(e[1],p2,kk+"-"+i)))))]; };
+    return h("div",{key:k,style:{background:C.card,border:"1px solid "+C.line2,borderRadius:16,padding:"14px 15px 16px"}},
+      h("div",{style:{display:"flex",alignItems:"center",gap:7,fontSize:11,fontWeight:800,letterSpacing:1,color:C.ink3,textTransform:"uppercase",marginBottom:12}}, icon("branch",15,C.ink3,2.2), b.title||"Decision tree"),
+      h("div",{style:{display:"flex",flexDirection:"column"}}, walk(g.root,[],k+"r")));
+  }
+  // Stage 5: the three regimes side by side. A table in desktop mode; on the phone, one card per issue with a regime filter.
+  renderCmp(b,ac,k){
+    const cols=b.cols, f=this.state.rdCmp, COL={CL:[ac.color,ac.tint,ac.dark], REFJA:["#5B6472","#EDEEF1","#3F4652"], CCAA:[C.gold,C.goldT,C.goldD]};
+    const tagEl=c=>h("span",{style:{display:"inline-block",fontFamily:HEAD,fontSize:10.5,fontWeight:800,letterSpacing:.5,color:COL[c[0]][2],background:COL[c[0]][1],borderRadius:7,padding:"2px 7px",whiteSpace:"nowrap"}}, c[1]);
+    const note=(r,kk)=>(r.note||[]).map((t,i)=>h("div",{key:kk+"n"+i,style:{fontSize:13.5,color:C.ink2,lineHeight:1.5,fontStyle:"italic"}}, rich(t,kk+"n"+i)));
+    if(this.state.desk){
+      const th={fontFamily:HEAD,fontWeight:800,fontSize:12.5,color:C.ink3,textAlign:"left",padding:"10px 12px",borderBottom:"2px solid "+C.line2,letterSpacing:.4,textTransform:"uppercase"};
+      const td={fontSize:13.5,color:C.ink,lineHeight:1.5,padding:"11px 12px",borderBottom:"1px solid "+C.line,verticalAlign:"top"};
+      return h("div",{key:k,style:{background:C.card,border:"1px solid "+C.line2,borderRadius:16,overflow:"hidden"}},
+        h("table",{style:{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}},
+          h("thead",null, h("tr",null, h("th",{style:Object.assign({},th,{width:"18%"})},"Issue"), cols.map(c=>h("th",{key:c[0],style:th}, tagEl(c))))),
+          h("tbody",null, b.rows.map((r,i)=>h("tr",{key:i,style:{background:i%2?"#FCFAF5":C.card}},
+            h("td",{style:Object.assign({},td,{fontFamily:HEAD,fontWeight:800})}, r.h),
+            Object.keys(r.cells).length ? cols.map(c=>h("td",{key:c[0],style:td}, rich(r.cells[c[0]]||"—",k+i+c[0]), c===cols[cols.length-1]&&r.note.length?h("div",{style:{marginTop:6}},note(r,k+i)):null))
+              : h("td",{colSpan:cols.length,style:td}, note(r,k+i)))))));
+    }
+    const chip=(id,lab)=>{ const on=f===id; return h("button",{key:id,className:"dc-btn dc-chip",onClick:()=>{ AU.play("select"); this.setState({rdCmp:id}); },
+      style:{padding:"7px 12px",borderRadius:999,border:"1.5px solid "+(on?C.ink:C.line2),background:on?C.ink:"transparent",color:on?"#fff":C.ink2,fontFamily:HEAD,fontWeight:700,fontSize:13,minHeight:36}}, lab); };
+    const show=cols.filter(c=>f==="all"||f===c[0]);
+    return h("div",{key:k,style:{display:"flex",flexDirection:"column",gap:10}},
+      h("div",{style:{display:"flex",flexWrap:"wrap",gap:7}}, [chip("all","All three")].concat(cols.map(c=>chip(c[0],c[1])))),
+      b.rows.map((r,i)=>h("div",{key:i,style:{background:C.card,border:"1px solid "+C.line2,borderRadius:14,padding:"12px 14px"}},
+        h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:15,color:C.ink,marginBottom:8}}, r.h),
+        h("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+          Object.keys(r.cells).length ? show.map(c=>h("div",{key:c[0],style:{display:"flex",gap:9,alignItems:"flex-start"}},
+            h("div",{style:{width:82,flexShrink:0,paddingTop:1}}, tagEl(c)),
+            h("div",{style:{flex:1,minWidth:0,fontSize:13.5,color:C.ink,lineHeight:1.5}}, rich(r.cells[c[0]]||"—",k+i+c[0])))) : null,
+          note(r,k+i)))));
+  }
+
   // ---------- daily tab ----------
   renderDaily(){
     const p=this.state.prog, n=this.dayN(), g=this.state.goal, per=this.state.per, met=n>=g, due=this.state.due, tt=this.todayT();
-    const rows=TRACKS.map(t=>{ const k=tt[t.id]||0, ok=k>=per;
-      return h("button",{key:t.id,className:"dc-btn dc-row",onClick:()=>this.startDaily(t.id),"aria-label":(ok?"Bonus round from ":"Study ")+t.name,
+    const dts=this.dailyT(), rows=dts.map(t=>{ const k=tt[t.id]||0, ok=k>=per, ready=this.dailyReady(t), nxj=!ready&&this.nextLesson(t);
+      return h("button",{key:t.id,className:"dc-btn dc-row",onClick:()=>{ if(nxj) this.openReader(nxj.l.id); else this.startDaily(t.id); },"aria-label":nxj?"Read "+nxj.l.t:((ok?"Bonus round from ":"Study ")+t.name),
         style:{display:"flex",alignItems:"center",gap:12,width:"100%",textAlign:"left",background:"transparent",border:"none",borderTop:"1px solid "+C.line,padding:"12px 4px",minHeight:58,fontFamily:BODY}},
         h("div",{style:{width:34,height:34,borderRadius:11,background:t.color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:HEAD,fontWeight:800,fontSize:15,flexShrink:0,boxShadow:"0 3px 0 rgba(0,0,0,.2)"}}, String(t.n)),
         h("div",{style:{flex:1,minWidth:0}},
           h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8,marginBottom:7}},
             h("span",{style:{fontFamily:HEAD,fontWeight:700,fontSize:15,color:C.ink}}, t.name),
             h("span",{style:{fontSize:12.5,fontWeight:800,color:ok?C.greenD:C.ink3,whiteSpace:"nowrap"}}, Math.min(k,per)+" of "+per)),
-          this.bar(k/per, ok?C.green:t.color, 6)),
-        ok ? icon("check",18,C.green,3) : icon("chevron",18,C.ink3,2));
+          this.bar(k/per, ok?C.green:t.color, 6),
+          nxj ? h("div",{style:{fontSize:12,fontWeight:700,color:t.dark||t.color,marginTop:6,lineHeight:1.4}}, "Read "+lessonLabel(nxj.l)+" to unlock its questions") : null),
+        ok ? icon("check",18,C.green,3) : icon(nxj?"read":"chevron",18,nxj?(t.dark||t.color):C.ink3,2));
     });
     const hero=h("div",{key:"hero",style:{background:C.card,border:"1px solid "+C.line2,borderRadius:20,padding:"22px 18px 18px",display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center"}},
       this.ring(n/g,136,13,C.green, h("div",null,
@@ -1528,12 +1881,12 @@ class Component extends DCLogic {
         h("div",{style:{fontSize:12,fontWeight:800,color:C.ink3,marginTop:5,letterSpacing:.5}}, "OF "+g)), "#EDE7D8", C.card),
       h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:21,color:C.ink,marginTop:16}}, met?"Daily goal complete":"Today's "+g),
       h("div",{style:{fontSize:13.5,color:C.ink2,marginTop:5,lineHeight:1.5,maxWidth:330,textWrap:"pretty"}},
-        met ? "Take a bonus round of 10, five from each track, or come back tomorrow to keep your streak."
-            : per+" from each track: new material in path order, mixed with cards due for review. Tap a track to study just that one."),
+        met ? "Take a bonus round of "+(5*dts.length)+", five from each track, or come back tomorrow to keep your streak."
+            : per+" from each track: new material in path order, mixed with cards due for review. Tap a track to study just that one."+(dts.some(t=>t.journey)?" LAW302 questions come from the modules you have read.":"")),
       h("div",{style:{width:"100%",marginTop:14,borderBottom:"1px solid "+C.line}}, rows),
       h("div",{style:{width:"100%",marginTop:16}}, this.btn(met?"Bonus round":(n?"Continue":"Start today's "+g), ()=>this.startDaily(), {full:true, icon:icon("play",15,"#fff",2,true)})));
     const ws=weekStart(), td=todayStr();
-    const days=[0,1,2,3,4,5,6].map(k=>{ const id=dstr(addDays(ws,k)), r=[this.dayProg(id)], fut=id>td, isT=id===td;
+    const days=[0,1,2,3,4,5,6].map(k=>{ const id=dstr(addDays(ws,k)), r=[this.dayProg(id)], fut=id>td, isT=id===td, g=this.goalFor(id);
       return h("div",{key:id,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6}},
         h("span",{style:{fontSize:11.5,fontWeight:800,color:isT?C.ink:C.ink3}}, "MTWTFSS"[k]),
         r[0]>=g ? h("div",{style:{width:32,height:32,borderRadius:"50%",background:C.green,display:"flex",alignItems:"center",justifyContent:"center"}}, icon("check",15,"#fff",3))
@@ -1555,7 +1908,7 @@ class Component extends DCLogic {
         h("div",{style:{fontFamily:HEAD,fontWeight:700,fontSize:15.5,color:C.ink}}, "Weekly exam"),
         h("div",{style:{fontSize:12.5,color:C.ink3,marginTop:2}}, w.rec ? "Taken · best "+Math.round(w.rec.best*100)+"%" : (w.unlocked ? "Ready · covers this week's "+w.ids.length+" questions" : Math.max(0,10-w.ids.length)+" more questions this week to unlock"))),
       icon("chevron",18,C.ink3,2));
-    return h("div",{style:{padding:"18px 16px 32px",display:"flex",flexDirection:"column",gap:12}}, hero, week, rev, this.mistBtn(), wk);
+    return this.cols([hero], [h("div",{key:"wkc"},week), rev, this.mistBtn(), wk]);
   }
 
   // ---------- exams tab ----------
@@ -1595,12 +1948,11 @@ class Component extends DCLogic {
         h("div",{style:{width:10,height:10,borderRadius:3,background:tr.color}}),
         h("div",{style:{fontSize:11.5,fontWeight:800,letterSpacing:.9,color:C.ink3,textTransform:"uppercase"}}, "Track "+tr.n+" · "+tr.name)),
       h("div",{style:{background:C.card,border:"1px solid "+C.line2,borderRadius:18,overflow:"hidden"}}, rows)); });
-    return h("div",{style:{padding:"18px 16px 32px",display:"flex",flexDirection:"column",gap:12}},
-      weekly, catchup, histCard,
-      h("div",{key:"ph",style:{marginTop:10}},
+    return this.cols([weekly, catchup, histCard ? h("div",{key:"hc"},histCard) : null].filter(Boolean), [
+      h("div",{key:"ph",style:{marginTop:this.state.desk?0:10}},
         h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:18,color:C.ink}},"Topic exams"),
-        h("div",{style:{fontSize:13,color:C.ink2,marginTop:3,lineHeight:1.5}},"One for each section of DealCraft and each Part B paper. Each unlocks when all of its lessons are done.")),
-      parts);
+        h("div",{style:{fontSize:13,color:C.ink2,marginTop:3,lineHeight:1.5}},"One for each section of DealCraft, each Part B paper and each LAW302 week. Each unlocks when all of its lessons are done.")),
+      ].concat(parts));
   }
   secRow(tr,pi,si,k){
     const ps=this.secState(tr,pi,si), rec=ps.rec, passed=!!(rec&&rec.passed), u=UNIT[ps.sc.ch[0]], open=ps.unlocked||passed, pt=tr.parts[pi];
@@ -1630,7 +1982,7 @@ class Component extends DCLogic {
       tile(ans.toLocaleString(),"ANSWERED","check",C.ink2), tile(String(passedN),"EXAMS PASSED","trophy",C.ink2));
     const start=addDays(weekStart(),-28), td=todayStr(), cells=[];
     "MTWTFSS".split("").forEach((x,i)=>cells.push(h("div",{key:"h"+i,style:{fontSize:10.5,fontWeight:800,color:C.ink3,textAlign:"center"}},x)));
-    for(let k=0;k<35;k++){ const id=dstr(addDays(start,k)), r=p.days[id]||[0,0], f=this.dayProg(id)/g, fut=id>td;
+    for(let k=0;k<35;k++){ const id=dstr(addDays(start,k)), r=p.days[id]||[0,0], f=this.dayProg(id)/this.goalFor(id), fut=id>td;
       const bg= fut?"transparent":(r[0]===0?"#EDE7D9":(f>=1?C.green:(f>=.5?"#8FD0AE":"#C6E8D5")));
       cells.push(h("div",{key:id,title:id+" · "+r[0]+" answered",style:{aspectRatio:"1",borderRadius:7,background:bg,boxSizing:"border-box",border:id===td?"2px solid "+C.ink:(fut?"1.5px dashed "+C.line2:"none")}})); }
     const heat=this.card("Last 5 weeks", h("div",null,
@@ -1642,11 +1994,18 @@ class Component extends DCLogic {
         h("div",{style:{display:"flex",justifyContent:"space-between",gap:10,fontSize:14,fontWeight:700,color:C.ink,marginBottom:7}}, h("span",null,"Track "+t.n+" · "+t.name), h("span",{style:{color:C.ink3,fontSize:12.5}}, x.d+"/"+x.n)),
         this.bar(x.n?x.d/x.n:0,t.color,6)); }));
     const per=this.state.per, dur=d=>d>=14?Math.round(d/7)+" weeks":d+(d===1?" day":" days");
-    const est=TRACKS.map(t=>{ const rem=(this.TQ[t.id]||[]).filter(q=>!p.q[q.id]).length; return {t, rem, d:Math.ceil(rem/per)}; }).filter(e=>e.rem>0);
+    const est=this.dailyT().map(t=>{ const rem=(this.TQ[t.id]||[]).filter(q=>!p.q[q.id]).length; return {t, rem, d:Math.ceil(rem/per)}; }).filter(e=>e.rem>0);
     const goalSeg=h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8}}, PER.map(gv=>{ const on=gv===per;
-      return h("button",{key:gv,className:"dc-btn dc-chip",onClick:()=>{ AU.play("select"); this.saveUI({per:gv},{goal:gv*TRACKS.length}); },
+      return h("button",{key:gv,className:"dc-btn dc-chip",onClick:()=>{ AU.play("select"); this.saveUI({per:gv},{goal:gv*this.dailyT().length}); },
         style:{padding:"10px 0",borderRadius:12,border:"2px solid "+(on?C.green:C.line2),background:on?C.greenT:C.card,color:on?C.greenD:C.ink2,fontFamily:HEAD,fontWeight:800,fontSize:15.5,boxShadow:"0 2px 0 "+(on?C.green:C.line2),minHeight:46}}, String(gv)); }));
-    const note= est.length ? "At "+per+" a day per track: "+est.map(e=>e.t.name+" has "+e.rem.toLocaleString()+" new questions left, about "+dur(e.d)).join("; ")+"." : "You've seen every question in both tracks.";
+    const note= est.length ? "At "+per+" a day per track: "+est.map(e=>e.t.name+" has "+e.rem.toLocaleString()+" new questions left, about "+dur(e.d)).join("; ")+"." : "You've seen every question in your daily tracks.";
+    const drow=t=>{ const on=!this.state.dailyOff[t.id];
+      return h("button",{key:"d"+t.id,className:"dc-btn dc-row",onClick:()=>this.setDaily(t.id),"aria-pressed":on,
+        style:{display:"flex",alignItems:"center",gap:12,width:"100%",textAlign:"left",background:"transparent",border:"none",borderTop:"1px solid "+C.line,padding:"11px 2px",fontFamily:BODY,minHeight:52}},
+        h("div",{style:{width:26,height:26,borderRadius:8,background:on?t.color:C.dim,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:HEAD,fontWeight:800,fontSize:12.5,flexShrink:0}}, String(t.n)),
+        h("div",{style:{flex:1,minWidth:0}}, h("div",{style:{fontSize:14.5,fontWeight:700,color:on?C.ink:C.ink3}}, t.name),
+          h("div",{style:{fontSize:12,color:C.ink3,marginTop:1}}, on?(t.journey?per+" a day, from the modules you have read":per+" questions a day"):"Not in your daily goal")),
+        this.switchEl(on)); };
     const trow=(k,label,sub,ic)=>h("button",{key:k,className:"dc-btn dc-row",onClick:()=>this.toggle(k),"aria-pressed":!!this.state[k],
       style:{display:"flex",alignItems:"center",gap:12,width:"100%",textAlign:"left",background:"transparent",border:"none",borderTop:"1px solid "+C.line,padding:"13px 2px",fontFamily:BODY,minHeight:56}},
       icon(ic,20,C.ink2,2),
@@ -1656,16 +2015,19 @@ class Component extends DCLogic {
       h("div",{style:{fontSize:13,fontWeight:800,color:C.ink2,marginBottom:9}},"Daily goal · questions per track"),
       goalSeg,
       h("div",{style:{fontSize:12.5,color:C.ink3,lineHeight:1.5,margin:"9px 0 6px"}}, note),
+      h("div",{style:{fontSize:13,fontWeight:800,color:C.ink2,margin:"14px 0 4px"}},"Tracks in your daily goal"),
+      TRACKS.map(drow),
+      h("div",{style:{fontSize:13,fontWeight:800,color:C.ink2,margin:"16px 0 4px"}},"Layout & sound"),
+      trow("desk","Desktop mode","Wide layout with a sidebar and course outline, for computers and tablets","monitor"),
       trow("sfx","Sound effects","Taps, answers and celebrations","volume"),
       trow("music","Music","Plays on the path; quieter in lessons, off in exams","music"),
       trow("haptics","Vibration","Short buzz on right and wrong answers","phone")));
     const install=this.state.installEvt ? this.btn("Install DealCraft", ()=>{ const e=this.state.installEvt; try{ e.prompt(); }catch(x){} this.setState({installEvt:null}); }, {full:true, icon:icon("download",18,"#fff",2.4)}) : null;
     const ptN=TRACKS.reduce((n,t)=>n+t.parts.length,0);
-    return h("div",{style:{padding:"18px 16px 32px",display:"flex",flexDirection:"column",gap:12}},
-      grid, heat, tracks, this.mistBtn(), this.syncCard(), settings, install,
+    return this.cols([grid, h("div",{key:"hm"},heat), h("div",{key:"tk"},tracks), this.mistBtn()], [h("div",{key:"sy"},this.syncCard()), h("div",{key:"st"},settings), install,
       h("div",{key:"ft",style:{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10,padding:"6px 2px 0"}},
         h("span",{style:{fontSize:12.5,color:C.ink3}}, this.ALLQ.length.toLocaleString()+" questions · "+TRACKS.length+" tracks · "+ptN+" parts"),
-        h("span",{className:"dc-link",onClick:()=>this.resetProgress(),style:{color:C.ink3,fontSize:12.5,fontWeight:700,textDecoration:"underline"}},"Reset progress")));
+        h("span",{className:"dc-link",onClick:()=>this.resetProgress(),style:{color:C.ink3,fontSize:12.5,fontWeight:700,textDecoration:"underline"}},"Reset progress"))].filter(Boolean));
   }
 
   // ---------- play ----------
@@ -1697,6 +2059,7 @@ class Component extends DCLogic {
       h("span",{style:{fontSize:11.5,fontWeight:800,letterSpacing:1,color:ac.dark,textTransform:"uppercase"}}, (isEx?"Question "+(s.idx+1)+" · ":"")+this.typeLabel(q.type)),
       q._retry ? h("span",{style:{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:800,letterSpacing:.6,color:C.redD,background:C.redT,padding:"3px 8px",borderRadius:999}}, icon("refresh",12,C.redD,2.4), "PREVIOUS MISTAKE") : null,
       (!isEx && s.prevMiss && !q._retry) ? h("span",{style:{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:800,letterSpacing:.6,color:C.goldD,background:C.goldT,padding:"3px 8px",borderRadius:999}}, icon("refresh",12,C.goldD,2.4), "MISSED "+s.prevMiss.n+"× BEFORE") : null,
+      q.lv ? h("span",{title:"Difficulty level",style:{fontSize:11,fontWeight:800,letterSpacing:.6,color:C.ink2,background:"#F1ECE0",padding:"3px 8px",borderRadius:999,textTransform:"uppercase"}}, q.lv+" · "+((LMETA[q.lesson]&&LMETA[q.lesson].tr.levels||{})[q.lv]||"")) : null,
       ((s.mode==="review"||s.mode==="daily") && LMETA[q.lesson]) ? h("span",{style:{flexBasis:"100%",fontSize:12.5,fontWeight:700,color:C.ink3,lineHeight:1.35}}, LMETA[q.lesson].pt.t+" · "+LMETA[q.lesson].l.code+" "+LMETA[q.lesson].l.t) : null));
     if(q.type==="scenario" && q.scenario){
       qa.push(h("div",{key:"sc",style:{background:ac.tint,borderRadius:14,padding:"13px 15px",marginBottom:14,borderLeft:"4px solid "+ac.color}},
@@ -1706,6 +2069,13 @@ class Component extends DCLogic {
     if(q.dia) qa.push(h("div",{key:"dia"}, this.renderDiagram(q.dia, ac)));
     qa.push(h("div",{key:"pr",style:{fontFamily:HEAD,fontWeight:500,fontSize:20,lineHeight:1.38,color:C.ink,marginBottom:18,textWrap:"pretty"}}, q.prompt));
     qa.push(h("div",{key:"ia"}, this.renderInteraction(q,ac)));
+    if(!isEx && q.hint && s.phase!=="checked") qa.push(s.hint
+      ? h("div",{key:"hn",style:{display:"flex",gap:9,alignItems:"flex-start",marginTop:14,background:C.goldT,borderRadius:12,padding:"11px 13px",animation:"dc-up .2s ease"}},
+          h("div",{style:{flexShrink:0,marginTop:1}}, icon("bulb",17,C.goldD,2.2)),
+          h("div",{style:{fontSize:14,color:C.ink,lineHeight:1.5,fontWeight:700}}, q.hint))
+      : h("button",{key:"hb",className:"dc-btn dc-link",onClick:()=>{ AU.play("tap"); this.setState({hint:true}); },
+          style:{display:"inline-flex",alignItems:"center",gap:6,marginTop:12,background:"none",border:"none",padding:"8px 0",minHeight:44,fontFamily:HEAD,fontWeight:800,fontSize:14,color:C.goldD}},
+          icon("bulb",17,C.goldD,2.2), "Show hint"));
     if(!isEx && s.phase==="checked") qa.push(h("div",{key:"ex"}, this.renderExplain(q,ac,s.pick,s.lastCorrect,false)));
     const mid=h("div",{key:"mid",className:"dc-scroll",ref:el=>{ this._mid=el; },style:{flex:1,overflowY:"auto",padding:"6px 18px 22px",position:"relative",WebkitOverflowScrolling:"touch"}}, qa);
     const toast=(!isEx && s.phase==="checked" && s.goalAt===s.idx) ? h("div",{key:"gt",style:{display:"flex",alignItems:"center",gap:10,margin:"0 16px 10px",padding:"10px 14px",borderRadius:14,background:C.green,color:"#fff",fontFamily:HEAD,fontWeight:800,fontSize:14.5,animation:"dc-pop .4s ease",boxShadow:"0 4px 0 "+C.greenD}},
@@ -2068,7 +2438,8 @@ class Component extends DCLogic {
       icon("book",15,C.ink2,2), h("span",null,q.cite)) : null;
     const amendPill = q.amended ? h("div",{key:"amp",style:{display:"inline-flex",alignItems:"center",gap:7,background:"#F4EAF3",borderRadius:999,padding:"6px 13px",fontSize:12.5,color:"#673A64",fontWeight:800}},
       icon("refresh",14,"#673A64",2.2), h("span",null,"Amended 2026")) : null;
-    if(citePill || amendPill) foot.push(h("div",{key:"ct",style:{display:"flex",flexWrap:"wrap",alignItems:"center",gap:8}}, citePill, amendPill));
+    const tagPills=(q.tags||[]).map(t=>h("span",{key:"tg"+t,style:{display:"inline-flex",alignItems:"center",background:"#F5F0E3",border:"1px solid "+C.line,borderRadius:999,padding:"4px 10px",fontSize:12,color:C.ink3,fontWeight:700}}, t));
+    if(citePill || amendPill || tagPills.length) foot.push(h("div",{key:"ct",style:{display:"flex",flexWrap:"wrap",alignItems:"center",gap:8}}, citePill, amendPill, tagPills));
 
     return h("div",{ref:inReview?undefined:(el)=>{this._why=el;},style:{marginTop:inReview?10:20,animation:inReview?"none":"dc-up .3s ease"}},
       h("div",{style:{fontSize:11.5,fontWeight:800,letterSpacing:1,color:C.ink3,marginBottom:10}},"WHY"),
@@ -2111,7 +2482,7 @@ class Component extends DCLogic {
         h("div",{style:{fontSize:12.5,color:C.ink2,fontWeight:700,marginTop:1}}, "Come back tomorrow to keep it going."))); }
   renderDone(){
     const s=this.state, pct=Math.round(s.finalPct*100), ac=s.mode==="review"?{color:C.gold,dark:C.goldD,tint:C.goldT}:s.accent, great=pct>=80, n=this.dayN(), g=s.goal;
-    const lm=LMETA[s.lessonId];
+    const lm=LMETA[s.lessonId], nxa=(s.mode==="lesson" && READ[s.lessonId]) ? this.nextAfter(s.lessonId) : null, nxj=(nxa && READ[nxa.l.id]) ? nxa : null;
     const title= s.mode==="review"?(s.revKind==="log"?"Practice complete!":"Review complete!"):(s.mode==="daily"?"Session complete!":"Lesson complete!");
     const miss=(s.slog||[]).filter(a=>!a.correct);
     const recap= miss.length ? h("div",{key:"rc",style:{width:"100%",maxWidth:400,marginTop:8,textAlign:"left"}},
@@ -2134,6 +2505,7 @@ class Component extends DCLogic {
     const foot=h("div",{key:"f",style:{padding:"12px 22px 18px",paddingBottom:"calc(18px + env(safe-area-inset-bottom))",display:"flex",flexDirection:"column",gap:10,alignItems:"center",flexShrink:0}},
       h("div",{style:{width:"100%",maxWidth:400,display:"flex",flexDirection:"column",gap:10}},
         this.btn("Continue", ()=>this.goHome(), {full:true, bg:great?ac.color:C.green, dark:great?ac.dark:C.greenD, icon:icon("arrow",18,"#fff",2.4)}),
+        nxj ? this.btn("Next: "+lessonLabel(nxj.l), ()=>this.openReader(nxj.l.id), {full:true, upper:false, bg:C.card, color:ac.dark, dark:C.line2, border:C.line2, icon:icon("read",18,ac.dark,2.2)}) : null,
         n<g ? this.btn("Keep going · "+(g-n)+" to goal", ()=>this.startDaily(), {full:true, bg:C.card, color:C.greenD, dark:C.line2, border:C.line2}) : null,
         s.due>0 ? this.btn("Review "+s.due+" due", ()=>this.startReview(), {full:true, bg:C.card, color:C.goldD, dark:C.line2, border:C.line2, icon:icon("cards",18,C.goldD,2)}) : null));
     return this.frame([content, foot, this.confettiLayer()]);
@@ -2471,12 +2843,11 @@ class Component extends DCLogic {
     h("div",{style:{fontSize:10.5,fontWeight:800,letterSpacing:.6,color:ok?C.greenD:C.redD,marginBottom:3}},lab),
     h("div",{style:{fontSize:13.5,fontWeight:700,color:C.ink,lineHeight:1.45,whiteSpace:"pre-line"}},txt)); }
   sheetEl(key,title,sub,kids){
-    return h("div",{key,onClick:()=>this.setState({sheet:null,hideFor:null}),style:{position:"absolute",top:0,left:0,right:0,bottom:0,background:"rgba(37,39,46,.4)",zIndex:40,display:"flex",flexDirection:"column",justifyContent:"flex-end",animation:"dc-fade .18s ease"}},
-      h("div",{onClick:e=>e.stopPropagation(),style:{background:C.paper,borderRadius:"22px 22px 0 0",padding:"14px 18px 16px",paddingBottom:"calc(16px + env(safe-area-inset-bottom))",maxHeight:"88%",overflowY:"auto",animation:"dc-up .22s ease"}},
-        h("div",{style:{width:40,height:5,borderRadius:3,background:C.line2,margin:"0 auto 14px"}}),
-        h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:19,color:C.ink}},title),
-        sub ? h("div",{style:{fontSize:13.5,color:C.ink2,marginTop:4,marginBottom:10,lineHeight:1.5,textWrap:"pretty"}},sub) : null,
-        kids));
+    return this.sheetWrap(key, ()=>this.setState({sheet:null,hideFor:null}), [
+        h("div",{key:"gr",style:{width:40,height:5,borderRadius:3,background:C.line2,margin:"0 auto 14px"}}),
+        h("div",{key:"t",style:{fontFamily:HEAD,fontWeight:800,fontSize:19,color:C.ink}},title),
+        sub ? h("div",{key:"s",style:{fontSize:13.5,color:C.ink2,marginTop:4,marginBottom:10,lineHeight:1.5,textWrap:"pretty"}},sub) : null,
+        h("div",{key:"k"}, kids)], {padding:"14px 18px 16px",paddingBottom:"calc(16px + env(safe-area-inset-bottom))",overflowY:"auto"});
   }
   renderHideSheet(){
     const id=this.state.hideFor;

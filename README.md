@@ -33,3 +33,20 @@ Your progress and mistake log are stored in a secret gist on your account called
 ## Updating
 
 When the app changes, upload the changed files over the old ones (Add file → Upload files). The web link updates within a minute, and a new APK is built automatically whenever anything in `android/` changes.
+
+## LAW302 learning journey (Track 3)
+
+Track 3 holds LAW302 Commercial Conflict of Laws, Weeks 12 and 13 (Foreign Judgments I and II). Each week is a part with its own exam, each stage is a chapter, and each module is a lesson. A lesson opens with a module reader (Objective, ELI5, Big idea, Rules & authorities, Traps, plus the decision trees and the three-regime comparison) and ends with its practice questions, each with feedback on every option and a hint. The week header has an ELI5 quick pass, the sources and notes for that week, and weak spots grouped by topic tag. LAW302 counts towards your daily goal like the other tracks (switch it off under Profile → Settings → Tracks in your daily goal), but its daily questions come only from modules you have read. Which modules you have read syncs across devices with the rest of your progress.
+
+To add another week, save its "Learning Journey + MCQ" file in the same format and rebuild the data and the APK page:
+
+```
+python3 tools/law302_import.py Week12.md Week13.md Week14.md > data/law302.js
+python3 tools/bundle_android.py
+```
+
+For a new week number, first add its title, colours and one-line summary to `WEEKS` at the top of `tools/law302_import.py`.
+
+## Desktop mode
+
+Profile → Settings → Desktop mode (or the screen button at the top right on a wide window) switches to a wide layout: a sidebar for tabs and tracks, a course outline beside the path, a two-column module reader and a full comparison table. The setting is kept per device.
