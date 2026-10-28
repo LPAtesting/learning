@@ -36,12 +36,18 @@ When the app changes, upload the changed files over the old ones (Add file → U
 
 ## LAW302 learning journey (Track 3)
 
-Track 3 holds LAW302 Commercial Conflict of Laws, Weeks 12 and 13 (Foreign Judgments I and II). Each week is a part with its own exam, each stage is a chapter, and each module is a lesson. A lesson opens with a module reader (Objective, ELI5, Big idea, Rules & authorities, Traps, plus the decision trees and the three-regime comparison) and ends with its practice questions, each with feedback on every option and a hint. The week header has an ELI5 quick pass, the sources and notes for that week, and weak spots grouped by topic tag. LAW302 counts towards your daily goal like the other tracks (switch it off under Profile → Settings → Tracks in your daily goal), but its daily questions come only from modules you have read. Which modules you have read syncs across devices with the rest of your progress.
+Track 3 holds LAW302 Commercial Conflict of Laws, Weeks 12 and 13 (Foreign Judgments I and II). Each week is a part with its own exam, each stage is a chapter, and each module is a lesson.
 
-To add another week, save its "Learning Journey + MCQ" file in the same format and rebuild the data and the APK page:
+A lesson is one page that teaches and tests together. It is split into numbered steps. Each step explains one idea in plain English (with an ELI5 analogy), states the law with its authorities, and then asks a quick-check question right there on the page. On a first pass the next step opens once you answer (or skip) the question in front of it; "Show the whole lesson" opens everything. The page ends with a short "Test yourself" round and a score. Answers count towards your review deck, mistake log, XP and daily goal exactly as in a quiz. "Questions only" on the path still runs a lesson's questions as a separate quiz, for quick revision.
+
+The week header has an ELI5 quick pass (every analogy for the week in one scroll), the sources and notes for that week, and weak spots grouped by topic tag. LAW302 counts towards your daily goal like the other tracks (switch it off under Profile → Settings → Tracks in your daily goal), but its daily questions come only from lessons you have opened and read. Which lessons you have read syncs across devices with the rest of your progress.
+
+The week files use format 2 of the content model (see Part A of each file): `##### ` step headings, `> **ELI5:**` / `> **Example:**` / `> **Why it matters:**` / `> **Exam tip:**` callouts, `**The law**` lists, `**Check:** Q12-3.1` lines for the questions asked at that point, and a final `**Practice:**` round. Files in the older format (one ELI5 box and a Practice line per module) still import; their questions appear at the end of the page.
+
+The week files live in `content/`. To change a lesson, edit its file there; to add another week, save its "Learning Journey + MCQ" file in the same format next to them. Then rebuild the data and the APK page:
 
 ```
-python3 tools/law302_import.py Week12.md Week13.md Week14.md > data/law302.js
+python3 tools/law302_import.py content/LAW302_Week12_Foreign_Judgments_I.md content/LAW302_Week13_Foreign_Judgments_II.md > data/law302.js
 python3 tools/bundle_android.py
 ```
 

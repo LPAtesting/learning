@@ -590,7 +590,7 @@ const TRACKS = [
         secs:[ {t:"Introduction & Principles", ch:["tc1"]}, {t:"Before & During the Offer", ch:["tc2","tc3","tc4"]},
                {t:"Offer Types & Terms", ch:["tc5","tc6"]}, {t:"Process & Procedure", ch:["tc7","tc8"]} ]} ]},
   { id:"pb", n:2, name:"Part B", noun:"Unit", color:"#3461B4", dark:"#244A8E", parts:[] },
-  // A learning journey: each lesson opens with a module reader before its questions. Parts are filled from data/law302.js on load.
+  // A learning journey: each lesson is one page that teaches in steps and asks its questions in place. Parts are filled from data/law302.js on load.
   { id:"lj", n:3, name:"LAW302 Conflict of Laws", noun:"Stage", color:"#2A7A8C", dark:"#1D5966", journey:true, since:"2026-10-28", parts:[] }
 ];
 const LMETA = {};
@@ -1092,15 +1092,59 @@ class Component extends DCLogic {
     const cap=this.props.sessionSize ?? 0; if(cap>0) qs=qs.slice(0,cap);
     this.begin("lesson", qs, {lessonId, unit, accent:{color:unit.color,dark:unit.dark,tint:unit.tint}});
   }
-  // ---------- learning journey: module reader ----------
+  // ---------- learning journey: lesson page (reading with the questions inside it) ----------
   openReader(lid){ if(!READ[lid]) return; AU.play("tap");
-    this.setState({screen:"reader", rd:{ids:[lid]}, popId:null, sheet:null, rdCmp:"all"}, ()=>{ if(this._rdEl) this._rdEl.scrollTop=0; }); }
+    this.setState({screen:"reader", rd:{ids:[lid]}, inl:this.inlFresh(lid), mode:"read", popId:null, sheet:null, rdCmp:"all", confetti:null}, ()=>{ if(this._rdEl) this._rdEl.scrollTop=0; }); }
+  // The questions a lesson page asks, in page order; any of the lesson's questions no Check line places come last. Hidden questions are left out.
+  inlIds(lid){ const L=READ[lid], ok={}, out=[]; (this.LES[lid]||[]).forEach(q=>{ ok[q.id]=1; });
+    (L?L.blocks:[]).forEach(b=>{ if(b.k==="quiz") b.ids.forEach(id=>{ if(ok[id] && out.indexOf(id)<0) out.push(id); }); });
+    (this.LES[lid]||[]).forEach(q=>{ if(out.indexOf(q.id)<0) out.push(q.id); }); return out; }
+  inlFresh(lid){ const qs={}; this.inlIds(lid).forEach(id=>{ qs[id]=this.prep(this.BYID[id]); });
+    return {lid, qs, sel:{}, ans:{}, first:{}, retry:{}, hint:{}, more:{}, skip:{}, open:false, fin:null, xp:0}; }
+  inlState(lid){ const s=this.state.inl; return (s && s.lid===lid) ? s : this.inlFresh(lid); }
+  inlSet(lid,patch){ this.setState(st=>({ inl:Object.assign({}, (st.inl&&st.inl.lid===lid)?st.inl:this.inlFresh(lid), patch) })); }
+  inlPick(lid,id,i){ const st=this.inlState(lid); if(st.ans[id]) return; if(st.sel[id]!==i) AU.play("select"); this.inlSet(lid,{sel:Object.assign({}, st.sel, {[id]:i})}); }
+  inlCheck(lid,id){
+    const s=this.state, st=this.inlState(lid), q=st.qs[id], pick=st.sel[id]; if(!q || pick==null || st.ans[id]) return;
+    const ok=!!q.options[pick].correct, retry=!!st.retry[id], gain=ok?(retry?5:10):0;
+    let prog=s.prog, crossed=false;
+    if(!retry){ const r=this.commit(prog, ok, q, gain); prog=r.prog; crossed=r.crossed; } else prog=Object.assign({}, prog, {xp:(prog.xp||0)+gain});
+    const up=this.bumpStreak(prog);
+    const mist=this.logAnswer(q, ok, this.answerText(q,{pick}));
+    const ans=Object.assign({}, st.ans, {[id]:{pick, ok}}), first=retry ? st.first : Object.assign({}, st.first, {[id]:ok});
+    let inl=Object.assign({}, st, {ans, first, xp:st.xp+gain}), fin=null;
+    const ids=this.inlIds(lid);
+    if(!st.fin && ids.every(x=>ans[x])){
+      const right=ids.filter(x=>first[x]).length, pct=ids.length ? right/ids.length : 1;
+      prog=Object.assign({}, prog); prog.lessons=Object.assign({}, prog.lessons);
+      const cur=prog.lessons[lid]||{crowns:0,best:0,plays:0}, crowns= pct>=0.8 ? Math.min((cur.crowns||0)+1,5) : (cur.crowns||0);
+      prog.lessons[lid]={crowns, best:Math.max(cur.best||0,pct), plays:(cur.plays||0)+1};
+      prog.read=Object.assign({}, prog.read); if(!prog.read[lid]) prog.read[lid]=Date.now();
+      prog.xp=(prog.xp||0)+25;
+      fin={pct, right, n:ids.length, crowns, crownUp:crowns>(cur.crowns||0), xp:inl.xp+25};
+      inl=Object.assign({}, inl, {fin, xp:fin.xp});
+    }
+    this.save(prog);
+    AU.play(ok?"correct":"wrong", 0); buzz(ok?"ok":"bad");
+    if(crossed){ setTimeout(()=>AU.play("goal"),480); this.flash("Daily goal reached · "+s.goal+" questions"); }
+    else if(up){ const k=prog.streak||1; this.flash(k===1?"Streak started":k+" day streak"); }
+    if(fin){ setTimeout(()=>{ AU.play("complete"); buzz("done"); }, 650); }
+    this.setState({prog, mist, inl, due:this.dueCount(prog,mist), confetti:(fin&&fin.pct>=.6)?this.makeConfetti():this.state.confetti});
+  }
+  // Second go at the questions missed first time: worth 5 XP, and the review deck is not touched again.
+  inlRetry(lid){ const st=this.inlState(lid), ids=this.inlIds(lid).filter(id=>st.first[id]===false && !(st.retry[id] && st.ans[id] && st.ans[id].ok));
+    if(!ids.length) return; AU.play("tap");
+    const ans=Object.assign({}, st.ans), sel=Object.assign({}, st.sel), retry=Object.assign({}, st.retry), qs=Object.assign({}, st.qs), more=Object.assign({}, st.more);
+    ids.forEach(id=>{ delete ans[id]; delete sel[id]; delete more[id]; retry[id]=true; qs[id]=this.prep(this.BYID[id]); });
+    this.setState({inl:Object.assign({}, st, {ans, sel, retry, qs, more}), confetti:null}, ()=>this.inlScroll(ids[0])); }
+  inlScroll(id){ requestAnimationFrame(()=>{ const sc=this._rdEl, el=this._qEls&&this._qEls[id]; if(!sc||!el) return;
+    const top=sc.scrollTop+el.getBoundingClientRect().top-sc.getBoundingClientRect().top-14;
+    try{ sc.scrollTo({top, behavior:"smooth"}); }catch(e){ sc.scrollTop=top; } }); }
   // ELI5 quick pass: every ELI5 block of one week in a single scroll.
   openQuick(pt){ const ids=[]; pt.secs.forEach(sc=>sc.ch.forEach(cid=>(UNIT[cid].lessons||[]).forEach(l=>{ if(READ[l.id]&&READ[l.id].blocks.some(b=>b.k==="eli5")) ids.push(l.id); })));
     if(!ids.length) return; AU.play("tap"); this.setState({screen:"reader", rd:{ids, quick:true, title:pt.label+" · ELI5 quick pass"}, popId:null, sheet:null}, ()=>{ if(this._rdEl) this._rdEl.scrollTop=0; }); }
   markRead(lid){ if(!READ[lid] || this.isRead(lid)) return; const prog=Object.assign({}, this.state.prog);
     prog.read=Object.assign({}, prog.read); prog.read[lid]=Date.now(); this.bumpStreak(prog); this.save(prog); this.setState({prog}); }
-  readerPractise(lid){ const lm=LMETA[lid]; if(!lm) return; this.markRead(lid); setTimeout(()=>this.startLesson(lm.u, lid), 0); }
   readerNext(lid){ this.markRead(lid); const nx=this.nextAfter(lid);
     if(nx && READ[nx.l.id]) setTimeout(()=>this.openReader(nx.l.id), 0); else setTimeout(()=>this.goHome(), 0); }
   toggleEli5(){ AU.play("select"); this.saveUI({eli5:!this.state.eli5}, {}); if(this._rdEl) this._rdEl.scrollTop=0; }
@@ -1657,7 +1701,7 @@ class Component extends DCLogic {
     const pulse=cur&&!open ? h("div",{style:{position:"absolute",top:0,left:0,right:0,bottom:0,borderRadius:"50%",border:"3px solid "+u.color,animation:"dc-pulse 1.9s ease-out infinite",pointerEvents:"none"}}) : null;
     const bubble=cur&&!open ? h("div",{style:{position:"absolute",top:-46,left:-40,right:-40,display:"flex",justifyContent:"center",pointerEvents:"none",zIndex:3}},
       h("div",{style:{animation:"dc-bob 1.6s ease-in-out infinite",position:"relative"}},
-        h("div",{style:{background:C.card,border:"2px solid "+C.line2,borderRadius:12,padding:"6px 13px",fontFamily:HEAD,fontWeight:800,fontSize:13,letterSpacing:.7,color:u.dark,whiteSpace:"nowrap"}}, (rdr&&!rd)?"READ":(frac>0?"CONTINUE":(rdr?"PRACTISE":"START"))),
+        h("div",{style:{background:C.card,border:"2px solid "+C.line2,borderRadius:12,padding:"6px 13px",fontFamily:HEAD,fontWeight:800,fontSize:13,letterSpacing:.7,color:u.dark,whiteSpace:"nowrap"}}, rdr?((rd||frac>0)?"CONTINUE":"START"):(frac>0?"CONTINUE":"START")),
         h("div",{style:{position:"absolute",bottom:-6,left:"50%",marginLeft:-6,width:12,height:12,background:C.card,borderRight:"2px solid "+C.line2,borderBottom:"2px solid "+C.line2,transform:"rotate(45deg)"}}))) : null;
     return h("div",{key:l.id,ref:cur?(el=>{ this._curEl=el; }):undefined,style:{display:"flex",justifyContent:"center",marginBottom:18,marginTop:cur?(i===0?40:52):0,transform:"translateX("+OFF[i%8]+"px)",position:"relative"}},
       h("div",{style:{position:"relative"}}, pulse, bubble, ringed));
@@ -1678,15 +1722,16 @@ class Component extends DCLogic {
         h("div",{style:{marginTop:13}}, this.btn(done?"Practise again":(cur?(seen?"Continue":"Start lesson"):"Start anyway"), ()=>this.startLesson(u,l.id),
           {full:true, bg:on?"#fff":u.color, color:on?u.dark:"#fff", dark:on?"rgba(0,0,0,.25)":u.dark}))));
   }
-  // Popover for a learning-journey lesson: read the module first, then practise.
+  // Popover for a learning-journey lesson: one page that teaches and asks as it goes. "Questions only" is the quick-revision route.
   journeyPop(u,l,i,x){
-    const rd=this.isRead(l.id), n=x.n, on=x.on, noun=l.kind==="module"?"module":"stage";
-    const status= x.done ? ((x.st&&x.st.plays) ? "Best score "+x.best+"%"+(x.st.crowns?" · Crown level "+x.st.crowns:"") : (n?"Every question seen in daily sessions":"Read"))
-      : rd ? (n ? "Read · practise the "+n+" questions to finish this "+noun : "Read")
-      : x.cur ? (n ? "Up next. Read the "+noun+" first, then practise." : "Up next on your journey") : "Ahead of your path. You can start it now.";
-    const main= (!rd || !n) ? [rd?"Read again":"Read "+noun, ()=>this.openReader(l.id), "read"] : [x.done?"Practise again":(x.seen?"Continue practice":"Practise "+n+" questions"), ()=>this.startLesson(u,l.id), "play"];
-    const alt= (rd && n) ? ["Read again", ()=>this.openReader(l.id)] : ((!rd && n) ? ["Skip to the questions", ()=>this.startLesson(u,l.id)] : null);
-    const ic=main[2]==="read" ? icon("read",17,on?u.dark:"#fff",2.3) : icon("play",14,on?u.dark:"#fff",2,true);
+    const rd=this.isRead(l.id), n=x.n, on=x.on, noun=l.kind==="module"?"module":"lesson";
+    const status= x.done ? ((x.st&&x.st.plays) ? "Best score "+x.best+"%"+(x.st.crowns?" · Crown level "+x.st.crowns:"") : (n?"Every question answered":"Read"))
+      : x.seen ? x.seen+" of "+n+" questions answered"
+      : rd ? "Read"+(n?" · "+n+" questions to answer":"")
+      : x.cur ? (n ? "Up next. "+n+" questions inside, answered as you read." : "Up next on your journey") : "Ahead of your path. You can start it now.";
+    const main=[x.done?"Review "+noun:((x.seen||rd)?"Continue "+noun:"Start "+noun), ()=>this.openReader(l.id), "read"];
+    const alt= n ? ["Questions only ("+n+")", ()=>this.startLesson(u,l.id)] : null;
+    const ic=icon("read",17,on?u.dark:"#fff",2.3);
     return h("div",{key:"pop"+l.id,style:{position:"relative",margin:"-2px 2px 26px",animation:"dc-up .18s ease"}},
       h("div",{style:{position:"absolute",top:-7,left:"calc(50% + "+OFF[i%8]+"px - 8px)",width:16,height:16,background:x.bg,transform:"rotate(45deg)",borderRadius:3,border:on?"none":"2px solid "+C.line2,borderRight:"none",borderBottom:"none"}}),
       h("div",{style:{position:"relative",background:x.bg,border:on?"none":"2px solid "+C.line2,borderRadius:16,padding:"15px 16px 16px",color:x.fg,boxShadow:"0 4px 0 "+(on?"rgba(0,0,0,.22)":C.line2)}},
@@ -1712,55 +1757,193 @@ class Component extends DCLogic {
   }
 
   // ---------- learning journey: reader ----------
+  // One scrolling page per lesson: steps of teaching, with each step's questions answered in place. On a first
+  // pass the page opens step by step: the rest stays folded until the question in front of it is answered or skipped.
   renderReader(){
     const s=this.state, rd=s.rd, quick=!!rd.quick, eli=quick||s.eli5, dk=s.desk, lid=rd.ids[0], lm=LMETA[lid], L=READ[lid];
     if(!lm||!L) return this.renderHome();
-    const u=lm.u, l=lm.l, pt=lm.pt, ac={color:u.color,dark:u.dark,tint:u.tint}, n=quick?0:this.lessonCount(lid), nx=quick?null:this.nextAfter(lid);
-    const all=L.blocks, two=dk && !eli && !all.some(b=>b.k==="h"||b.k==="cmp") && all.some(b=>b.k==="obj"||b.k==="big"||b.k==="traps");
+    const u=lm.u, l=lm.l, pt=lm.pt, ac={color:u.color,dark:u.dark,tint:u.tint}, nx=quick?null:this.nextAfter(lid);
+    const all=L.blocks, stepped=all.some(b=>b.k==="step");
+    const st=quick?null:this.inlState(lid), ids=quick?[]:this.inlIds(lid), total=ids.length, numOf={};
+    ids.forEach((id,i)=>{ numOf[id]=i+1; });
+    this._qEls=this._qEls||{}; this._stepEls={};
     const kick=quick ? rd.title : pt.label+" · "+this.kicker(u)+(l.kind==="module"?" · Module "+l.code:(l.kind==="overview"?" · Overview":""));
     const top=h("div",{key:"top",style:{display:"flex",alignItems:"center",gap:12,padding:"12px 16px 10px",paddingTop:"calc(12px + env(safe-area-inset-top))",borderBottom:"1px solid "+C.line,flexShrink:0,background:C.paper}},
       h("button",{className:"dc-btn","aria-label":"Close",onClick:()=>this.goHome(),style:{background:"none",border:"none",padding:6,margin:-6,display:"flex"}}, icon("x",26,C.ink3,2.4)),
       h("div",{style:{flex:1,minWidth:0,fontSize:11.5,fontWeight:800,letterSpacing:.8,color:ac.dark,textTransform:"uppercase",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}, kick),
-      quick ? null : h("button",{className:"dc-btn dc-chip",onClick:()=>this.toggleEli5(),"aria-pressed":s.eli5,title:"Show only the plain-English (ELI5) blocks",
+      quick ? null : h("button",{className:"dc-btn dc-chip",onClick:()=>this.toggleEli5(),"aria-pressed":s.eli5,title:"Show only the plain-English (ELI5) explanations",
         style:{display:"flex",alignItems:"center",gap:7,padding:"6px 8px 6px 11px",minHeight:38,borderRadius:12,border:"2px solid "+(s.eli5?ac.color:C.line2),background:s.eli5?ac.tint:C.card,fontFamily:HEAD,fontWeight:800,fontSize:12.5,color:s.eli5?ac.dark:C.ink2,flexShrink:0}},
         "ELI5 only", h("div",{style:{transform:"scale(.78)",transformOrigin:"right center",marginLeft:-6}}, this.switchEl(s.eli5))));
-    let body;
+    let body, cut=false, side=null;
     if(quick){
-      body=rd.ids.map((id,i)=>{ const m=LMETA[id], B=READ[id].blocks.filter(b=>b.k==="eli5"||b.k==="h");
+      body=rd.ids.map((id,i)=>{ const m=LMETA[id], B=READ[id].blocks.filter(b=>b.k==="eli5"||b.k==="h"||b.k==="step"), mac={color:m.u.color,dark:m.u.dark,tint:m.u.tint};
         return h("div",{key:id,style:{marginTop:i?26:0}},
           h("div",{style:{fontSize:11,fontWeight:800,letterSpacing:.8,color:m.u.dark,textTransform:"uppercase"}}, this.kicker(m.u)+(m.l.kind==="module"?" · Module "+m.l.code:"")),
           h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:19,color:C.ink,lineHeight:1.25,margin:"2px 0 10px"}}, m.l.t),
-          h("div",{style:{display:"flex",flexDirection:"column",gap:10}}, B.map((b,bi)=>this.readerBlock(b,{color:m.u.color,dark:m.u.dark,tint:m.u.tint},id+":"+bi,id))),
+          h("div",{style:{display:"flex",flexDirection:"column",gap:10}}, B.filter((b,bi)=>b.k!=="step" || (B[bi+1]&&B[bi+1].k==="eli5")).map((b,bi)=>b.k==="step"
+            ? h("div",{key:id+":s"+bi,style:{fontFamily:HEAD,fontWeight:800,fontSize:14.5,color:m.u.dark,marginTop:bi?6:0}}, rich(b.t,id+"s"+bi))
+            : this.readerBlock(b,mac,id+":"+bi,id))),
           h("button",{className:"dc-btn dc-link",onClick:()=>this.openReader(id),style:{display:"inline-flex",alignItems:"center",gap:5,marginTop:8,background:"none",border:"none",padding:"8px 0",fontFamily:HEAD,fontWeight:800,fontSize:13.5,color:m.u.dark,minHeight:40}},
-            "Read the full "+(m.l.kind==="module"?"module":"stage"), icon("chevron",14,m.u.dark,2.6))); });
+            "Open the full "+(m.l.kind==="module"?"module":"lesson"), icon("chevron",14,m.u.dark,2.6))); });
     } else {
-      const shown=all.map((b,bi)=>({b,bi})).filter(x=>!eli || x.b.k==="eli5" || x.b.k==="h");
-      const mins=Math.max(1, Math.round(JSON.stringify(all).length/1300));
+      const textLen=JSON.stringify(all.filter(b=>b.k!=="quiz")).length, mins=Math.max(1, Math.round(textLen/1300 + total*.6));
       const head=h("div",{key:"hd",style:{marginBottom:16}},
         h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:dk?30:26,color:C.ink,letterSpacing:-.3,lineHeight:1.15,textWrap:"pretty"}}, l.t),
         h("div",{style:{display:"flex",flexWrap:"wrap",alignItems:"center",gap:"4px 12px",marginTop:8,fontSize:12.5,fontWeight:800,color:C.ink3}},
-          h("span",{style:{display:"inline-flex",alignItems:"center",gap:5}}, icon("clock",14,C.ink3,2.2), "About "+mins+" min read"),
-          n ? h("span",{style:{display:"inline-flex",alignItems:"center",gap:5}}, icon("cards",14,C.ink3,2.2), n+" practice questions") : null,
-          this.isRead(lid) ? h("span",{style:{display:"inline-flex",alignItems:"center",gap:5,color:C.greenD}}, icon("check",14,C.green,3), "Read") : null),
-        eli ? h("div",{style:{marginTop:12,fontSize:13,color:ac.dark,background:ac.tint,borderRadius:12,padding:"9px 12px",fontWeight:700,lineHeight:1.45}}, "ELI5 only: the plain-English versions, for a quick first pass. Turn it off for the rules, authorities and traps.") : null);
-      const el=x=>this.readerBlock(x.b,ac,lid+":"+x.bi,lid);
-      if(two){ const side=x=>x.b.k==="obj"||x.b.k==="big"||x.b.k==="traps";
-        body=[head, h("div",{key:"g",style:{display:"grid",gridTemplateColumns:"minmax(0,1fr) 340px",gap:20,alignItems:"start"}},
-          h("div",{style:{display:"flex",flexDirection:"column",gap:12,minWidth:0}}, shown.filter(x=>!side(x)).map(el)),
-          h("div",{style:{display:"flex",flexDirection:"column",gap:12,position:"sticky",top:0}}, shown.filter(side).map(el)))];
-      } else body=[head, h("div",{key:"b",style:{display:"flex",flexDirection:"column",gap:12}}, shown.map(el))];
+          h("span",{style:{display:"inline-flex",alignItems:"center",gap:5}}, icon("clock",14,C.ink3,2.2), "About "+mins+" min"),
+          total ? h("span",{style:{display:"inline-flex",alignItems:"center",gap:5}}, icon("cards",14,C.ink3,2.2), total+" question"+(total===1?"":"s")+" inside") : null,
+          this.isDone(lid) ? h("span",{style:{display:"inline-flex",alignItems:"center",gap:5,color:C.greenD}}, icon("check",14,C.green,3), "Completed")
+            : (this.isRead(lid) ? h("span",{style:{display:"inline-flex",alignItems:"center",gap:5,color:C.greenD}}, icon("check",14,C.green,3), "Read") : null)),
+        eli ? h("div",{style:{marginTop:12,fontSize:13,color:ac.dark,background:ac.tint,borderRadius:12,padding:"9px 12px",fontWeight:700,lineHeight:1.45}}, "ELI5 only: just the plain-English explanations, for a quick first pass. Turn it off for the full lesson, the law and the questions.")
+          : (total && !this.isDone(lid) && !st.open && stepped ? h("div",{style:{marginTop:12,display:"flex",gap:9,alignItems:"flex-start",fontSize:13,color:C.ink2,background:C.card,border:"1px solid "+C.line2,borderRadius:12,padding:"9px 12px",fontWeight:700,lineHeight:1.45}},
+              h("div",{style:{flexShrink:0,marginTop:1}}, icon("zap",15,ac.dark,2.2,true)), h("div",null, "Read a step, answer its question, and the next step opens. Every answer counts towards your review deck and daily goal.")) : null));
+      // Pass 1: what is shown, and where the page stops on a first pass.
+      const shown=all.map((b,bi)=>({b,bi})).filter(x=>!eli || x.b.k==="eli5" || x.b.k==="h" || (x.b.k==="step" && all[x.bi+1] && all[x.bi+1].k==="eli5"));
+      const placed={}; all.forEach(b=>{ if(b.k==="quiz") b.ids.forEach(id=>{ placed[id]=1; }); });
+      const extra=eli?[]:ids.filter(id=>!placed[id]);
+      if(extra.length) shown.push({b:{k:"quiz",ids:extra,end:true},bi:all.length});
+      const gate=!eli && total>0 && !st.open && !this.isDone(lid), p=this.state.prog;
+      const blocking=id=>st.qs[id] && !st.ans[id] && !st.skip[id] && !p.q[id];
+      let stopAt=shown.length, n=0; const steps=[];
+      shown.forEach((x,i)=>{ if(x.b.k==="step"){ n++; steps.push({t:x.b.t, i, ids:[]}); } else if(x.b.k==="quiz" && steps.length) steps[steps.length-1].ids.push.apply(steps[steps.length-1].ids, x.b.ids.filter(id=>st.qs[id]));
+        if(gate && stopAt===shown.length && x.b.k==="quiz" && x.b.ids.some(blocking)) stopAt=i+1; });
+      cut=stopAt<shown.length;
+      // Pass 2: render. On a wide screen the objective (and, without steps, the big idea and traps) sits in a side column.
+      const layout=(dk && !eli && stepped) ? "outline" : ((dk && !eli && !all.some(b=>b.k==="h"||b.k==="cmp") && all.some(b=>b.k==="obj"||b.k==="big"||b.k==="traps")) ? "side" : "one");
+      const sideK=b=>layout==="outline" ? b.k==="obj" : (layout==="side" && (b.k==="obj"||b.k==="big"||b.k==="traps"));
+      let sn=0, endHead=false; const out=[head];
+      shown.slice(0,stopAt).forEach(x=>{ const b=x.b, k=lid+":"+x.bi;
+        if(b.k==="step"){ sn++; out.push(this.stepHead(b,sn,ac,k)); return; }
+        if(b.k==="quiz"){ const qids=b.ids.filter(id=>st.qs[id]); if(!qids.length) return;
+          if(b.end && !endHead){ endHead=true; out.push(h("div",{key:k+"eh",style:{marginTop:18,paddingTop:16,borderTop:"2px solid "+C.line2}},
+            h("div",{style:{fontSize:11.5,fontWeight:800,letterSpacing:1,color:ac.dark,textTransform:"uppercase"}}, "Test yourself"),
+            h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:21,color:C.ink,lineHeight:1.2,marginTop:2}}, "Put the whole lesson together"))); }
+          out.push(h("div",{key:k,style:{display:"flex",flexDirection:"column",gap:12}}, qids.map(id=>this.inlCard(lid,st.qs[id],numOf[id],total,ac,b.end))));
+          return; }
+        if(!sideK(b)) out.push(this.readerBlock(b,ac,k,lid)); });
+      if(cut){ const left=shown.slice(stopAt), more=left.filter(x=>x.b.k==="step").length, bq=shown[stopAt-1].b.ids.filter(blocking);
+        out.push(h("div",{key:"lock",style:{border:"2px dashed "+C.line2,borderRadius:16,padding:"16px 16px 12px",textAlign:"center",background:"#FCFAF4"}},
+          h("div",{style:{display:"inline-flex",alignItems:"center",gap:8,fontFamily:HEAD,fontWeight:800,fontSize:15,color:C.ink2}}, icon("lock",17,C.ink3,2.3), "Answer the question above to keep going"),
+          h("div",{style:{fontSize:13,color:C.ink3,fontWeight:700,marginTop:4}}, more ? more+" more step"+(more===1?"":"s")+" below" : "The final questions are below"),
+          h("div",{style:{display:"flex",justifyContent:"center",flexWrap:"wrap",gap:"0 18px",marginTop:4}},
+            h("button",{className:"dc-btn dc-link",onClick:()=>{ AU.play("tap"); const sk=Object.assign({}, st.skip); bq.forEach(id=>{ sk[id]=true; }); this.inlSet(lid,{skip:sk}); },style:{background:"none",border:"none",padding:"8px 0",minHeight:40,fontFamily:HEAD,fontWeight:800,fontSize:13.5,color:ac.dark}}, "Skip it for now"),
+            h("button",{className:"dc-btn dc-link",onClick:()=>{ AU.play("tap"); this.inlSet(lid,{open:true}); },style:{background:"none",border:"none",padding:"8px 0",minHeight:40,fontFamily:HEAD,fontWeight:800,fontSize:13.5,color:C.ink3}}, "Show the whole lesson"))));
+      } else if(total && !eli) out.push(this.inlSummary(lid,st,ids,ac));
+      if(layout==="outline"){
+        const ansN=ids.filter(id=>st.ans[id]).length;
+        side=h("div",{style:{display:"flex",flexDirection:"column",gap:12,position:"sticky",top:0}},
+          all.filter(b=>b.k==="obj").map((b,i)=>this.readerBlock(b,ac,lid+":so"+i,lid)),
+          h("div",{style:{background:C.card,border:"1px solid "+C.line2,borderRadius:16,padding:"13px 14px"}},
+            h("div",{style:{display:"flex",alignItems:"center",gap:7,fontSize:11,fontWeight:800,letterSpacing:1,color:C.ink3,textTransform:"uppercase",marginBottom:10}}, icon("layers",15,C.ink3,2.3), "In this lesson"),
+            steps.map((sp,i)=>{ const locked=sp.i>=stopAt, done=sp.ids.length>0 && sp.ids.every(id=>st.ans[id]);
+              return h("button",{key:i,className:"dc-btn dc-row",disabled:locked,onClick:()=>{ const sc=this._rdEl, el=this._stepEls[i+1]; if(sc&&el){ AU.play("tap"); const top=sc.scrollTop+el.getBoundingClientRect().top-sc.getBoundingClientRect().top-10; try{ sc.scrollTo({top,behavior:"smooth"}); }catch(e){ sc.scrollTop=top; } } },
+                style:{display:"flex",alignItems:"flex-start",gap:9,width:"100%",textAlign:"left",background:"none",border:"none",borderRadius:9,padding:"6px 6px",fontFamily:BODY,cursor:locked?"default":"pointer"}},
+                h("div",{style:{width:22,height:22,borderRadius:7,flexShrink:0,background:done?C.green:(locked?"#EDE7D8":ac.tint),color:done?"#fff":(locked?C.ink3:ac.dark),display:"flex",alignItems:"center",justifyContent:"center",fontFamily:HEAD,fontWeight:800,fontSize:11.5}}, done?icon("check",12,"#fff",3):(locked?icon("lock",11,C.ink3,2.4):String(i+1))),
+                h("div",{style:{fontSize:13.5,lineHeight:1.4,fontWeight:700,color:locked?C.ink3:C.ink}}, rich(sp.t,"ol"+i))); }),
+            total ? h("div",{style:{marginTop:10,paddingTop:10,borderTop:"1px solid "+C.line}},
+              h("div",{style:{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:800,color:C.ink3,marginBottom:6}}, h("span",null,"Questions answered"), h("span",null,ansN+"/"+total)),
+              this.bar(total?ansN/total:0, ac.color, 6)) : null));
+        body=[h("div",{key:"g",style:{display:"grid",gridTemplateColumns:"minmax(0,1fr) 300px",gap:26,alignItems:"start"}},
+          h("div",{style:{display:"flex",flexDirection:"column",gap:14,minWidth:0}}, out), side)];
+      } else if(layout==="side"){
+        body=[h("div",{key:"g",style:{display:"grid",gridTemplateColumns:"minmax(0,1fr) 340px",gap:20,alignItems:"start"}},
+          h("div",{style:{display:"flex",flexDirection:"column",gap:12,minWidth:0}}, out),
+          h("div",{style:{display:"flex",flexDirection:"column",gap:12,position:"sticky",top:0}}, all.map((b,bi)=>sideK(b)?this.readerBlock(b,ac,lid+":"+bi,lid):null)))];
+      } else body=[h("div",{key:"b",style:{display:"flex",flexDirection:"column",gap:stepped?14:12}}, out)];
     }
-    const wide=two || all.some(b=>b.k==="cmp");
-    const content=h("div",{key:"c",className:"dc-scroll",ref:el=>{ this._rdEl=el; },onScroll:quick||eli?undefined:(e=>{ const t=e.currentTarget; if(t.scrollTop+t.clientHeight>=t.scrollHeight-40) this.markRead(lid); }),
+    const wide=(dk && !eli && (stepped || all.some(b=>b.k==="cmp")));
+    const content=h("div",{key:"c",className:"dc-scroll",ref:el=>{ this._rdEl=el; },onScroll:quick||eli||cut?undefined:(e=>{ const t=e.currentTarget; if(t.scrollTop+t.clientHeight>=t.scrollHeight-40) this.markRead(lid); }),
       style:{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}},
       h("div",{style:{padding:dk?"26px 30px 40px":"18px 18px 30px",maxWidth:dk?(wide?1120:780):undefined,margin:"0 auto"}}, body));
     let cta;
+    const nxt=()=>this.btn(nx&&READ[nx.l.id] ? "Next: "+lessonLabel(nx.l) : "Finish", ()=>this.readerNext(lid), {full:true,bg:ac.color,dark:ac.dark,icon:icon("arrow",18,"#fff",2.4)});
     if(quick) cta=this.btn("Done", ()=>this.goHome(), {full:true,bg:ac.color,dark:ac.dark});
-    else if(n) cta=this.btn("Practise "+n+" questions", ()=>this.readerPractise(lid), {full:true,bg:ac.color,dark:ac.dark,icon:icon("play",14,"#fff",2,true)});
-    else cta=this.btn(nx&&READ[nx.l.id] ? "Next: "+lessonLabel(nx.l) : "Finish", ()=>this.readerNext(lid), {full:true,bg:ac.color,dark:ac.dark,icon:icon("arrow",18,"#fff",2.4)});
+    else if(eli) cta=this.btn("Show the full lesson", ()=>this.toggleEli5(), {full:true,bg:ac.color,dark:ac.dark,icon:icon("read",18,"#fff",2.2)});
+    else if(!total || st.fin) cta=nxt();
+    else { const ansN=ids.filter(id=>st.ans[id]).length;
+      const goNext=()=>{ AU.play("tap"); const sc=this._rdEl, an=this.inlState(lid).ans, id=ids.find(x=>!an[x] && this._qEls[x] && this._qEls[x].isConnected);
+        if(id) this.inlScroll(id); else if(sc){ try{ sc.scrollTo({top:sc.scrollHeight,behavior:"smooth"}); }catch(e){ sc.scrollTop=sc.scrollHeight; } } };
+      cta=h("div",{style:{display:"flex",alignItems:"center",gap:14}},
+        h("div",{style:{flex:1,minWidth:0}},
+          h("div",{style:{display:"flex",justifyContent:"space-between",fontSize:12.5,fontWeight:800,color:C.ink2,marginBottom:6}}, h("span",null,ansN+" of "+total+" answered"), st.xp ? h("span",{style:{color:C.greenD}},"+"+st.xp+" XP") : null),
+          this.bar(ansN/total, ac.color, 8)),
+        h("div",{style:{flexShrink:0}}, this.btn("Next question", goNext, {bg:ac.color, dark:ac.dark, upper:false, fs:15, pad:"12px 16px", icon:icon("arrow",16,"#fff",2.4)}))); }
     const foot=h("div",{key:"f",style:{borderTop:"1px solid "+C.line,background:C.paper,padding:"12px 16px 14px",paddingBottom:"calc(14px + env(safe-area-inset-bottom))",flexShrink:0}},
-      h("div",{style:{maxWidth:dk?520:undefined,margin:"0 auto"}}, cta));
-    return this.frame([top, content, foot], null, 1180);
+      h("div",{style:{maxWidth:dk?560:undefined,margin:"0 auto"}}, cta));
+    return this.frame([top, content, foot, this.confettiLayer()], null, 1180);
+  }
+  stepHead(b,n,ac,k){
+    return h("div",{key:k,ref:el=>{ this._stepEls[n]=el; },style:{display:"flex",alignItems:"center",gap:12,marginTop:n>1?18:6,scrollMarginTop:12}},
+      h("div",{style:{width:34,height:34,borderRadius:11,background:ac.color,color:"#fff",fontFamily:HEAD,fontWeight:800,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 3px 0 "+ac.dark}}, String(n)),
+      h("div",{style:{flex:1,minWidth:0,fontFamily:HEAD,fontWeight:800,fontSize:21,color:C.ink,lineHeight:1.22,textWrap:"pretty"}}, rich(b.t,k)));
+  }
+  // A question answered on the lesson page.
+  inlCard(lid,q,num,total,ac,end){
+    const s=this.state, st=this.inlState(lid), a=st.ans[q.id], sel=st.sel[q.id], done=!!a, retry=!!st.retry[q.id];
+    const levels=(LMETA[q.lesson]&&LMETA[q.lesson].tr.levels)||{}, missed=s.mist.items[q.id];
+    const pill=(txt,fg,bg,ic)=>h("span",{style:{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:800,letterSpacing:.5,color:fg,background:bg,padding:"3px 8px",borderRadius:999,textTransform:"uppercase"}}, ic||null, txt);
+    const head=h("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}},
+      h("span",{style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11.5,fontWeight:800,letterSpacing:1,color:ac.dark,textTransform:"uppercase"}}, icon(end?"target":"zap",14,ac.dark,2.3,!end), (end?"Test yourself":"Quick check")+" · "+num+" of "+total),
+      q.lv ? pill(q.lv+" · "+(levels[q.lv]||""),C.ink2,"#F1ECE0") : null,
+      retry ? pill("Second try",C.redD,C.redT,icon("refresh",11,C.redD,2.4)) : ((missed && !done) ? pill("Missed "+missed.n+"× before",C.goldD,C.goldT,icon("refresh",11,C.goldD,2.4)) : null));
+    const opts=h("div",{style:{display:"flex",flexDirection:"column",gap:9}}, q.options.map((o,i)=>{
+      const on=sel===i; let bd=C.line2, bg=C.card, fg=C.ink, sh="0 2px 0 "+C.line2, mark=null;
+      if(!done){ if(on){ bd=ac.color; bg=ac.tint; sh="0 2px 0 "+ac.color; } }
+      else if(o.correct){ bd=C.green; bg=C.greenT; sh="none"; mark=icon("check",16,"#fff",2.8); }
+      else if(a.pick===i){ bd=C.red; bg=C.redT; sh="none"; mark=icon("x",16,"#fff",2.8); }
+      else { fg=C.ink2; sh="none"; }
+      return h("button",{key:i,className:"dc-opt dc-btn",disabled:done,"aria-pressed":on,onClick:()=>this.inlPick(lid,q.id,i),
+        style:{textAlign:"left",display:"flex",alignItems:"center",gap:12,background:bg,border:"2px solid "+bd,boxShadow:sh,borderRadius:14,padding:"11px 13px",width:"100%",fontFamily:BODY,color:fg,cursor:done?"default":"pointer",opacity:done&&!o.correct&&a.pick!==i?.75:1}},
+        h("div",{style:{width:27,height:27,borderRadius:"50%",flexShrink:0,border:"2px solid "+(mark?"transparent":(on&&!done?ac.color:C.line2)),background:mark?(o.correct?C.green:C.red):(on&&!done?ac.color:"transparent"),display:"flex",alignItems:"center",justifyContent:"center",fontFamily:HEAD,fontWeight:700,fontSize:13,color:on&&!done?"#fff":C.ink2}},
+          mark || String.fromCharCode(65+i)),
+        h("span",{style:{fontSize:15,lineHeight:1.45,fontWeight:600}}, o.t)); }));
+    const kids=[head, h("div",{key:"pr",style:{fontFamily:HEAD,fontWeight:600,fontSize:17.5,lineHeight:1.4,color:C.ink,marginBottom:13,textWrap:"pretty"}}, q.prompt), opts];
+    if(!done){
+      if(q.hint && st.hint[q.id]) kids.push(h("div",{key:"hn",style:{display:"flex",gap:9,alignItems:"flex-start",marginTop:12,background:C.goldT,borderRadius:12,padding:"10px 12px",animation:"dc-up .2s ease"}},
+        h("div",{style:{flexShrink:0,marginTop:1}}, icon("bulb",16,C.goldD,2.2)), h("div",{style:{fontSize:14,color:C.ink,lineHeight:1.5,fontWeight:700}}, q.hint)));
+      kids.push(h("div",{key:"ck",style:{display:"flex",alignItems:"center",gap:14,marginTop:13,flexWrap:"wrap"}},
+        h("div",{style:{flex:"1 1 180px"}}, this.btn("Check", ()=>this.inlCheck(lid,q.id), {full:true, disabled:sel==null, bg:ac.color, dark:ac.dark, pad:"11px 18px", fs:15})),
+        (q.hint && !st.hint[q.id]) ? h("button",{className:"dc-btn dc-link",onClick:()=>{ AU.play("tap"); this.inlSet(lid,{hint:Object.assign({}, st.hint, {[q.id]:true})}); },
+          style:{display:"inline-flex",alignItems:"center",gap:6,background:"none",border:"none",padding:"8px 2px",minHeight:44,fontFamily:HEAD,fontWeight:800,fontSize:14,color:C.goldD}}, icon("bulb",16,C.goldD,2.2), "Hint") : null));
+    } else kids.push(this.inlExplain(lid,q,a,ac,retry));
+    return h("div",{key:"q"+q.id,ref:el=>{ if(el) this._qEls[q.id]=el; },style:{background:C.card,border:"2px solid "+(done?(a.ok?C.green:C.red):ac.color),borderRadius:18,padding:"14px 14px 15px",boxShadow:"0 4px 0 "+(done?(a.ok?"#BFE3CF":"#F2C4C3"):ac.tint),scrollMarginTop:12}}, kids);
+  }
+  // After an answer: the verdict, why the right answer is right (and why the pick was wrong), the other options on request.
+  inlExplain(lid,q,a,ac,retry){
+    const st=this.inlState(lid), more=!!st.more[q.id], ci=q.options.findIndex(o=>o.correct);
+    const row=(o,i,lab,col,bg)=>h("div",{key:"w"+i,style:{background:bg,borderLeft:"3px solid "+col,borderRadius:"0 10px 10px 0",padding:"9px 12px",marginTop:8}},
+      h("div",{style:{display:"flex",alignItems:"baseline",gap:7,marginBottom:3}},
+        h("span",{style:{fontWeight:800,fontSize:12.5,color:col,flexShrink:0}}, String.fromCharCode(65+i)+" · "+lab)),
+      h("div",{style:{fontSize:14,color:C.ink,lineHeight:1.55}}, o.why));
+    const others=q.options.map((o,i)=>({o,i})).filter(x=>x.i!==ci && x.i!==a.pick);
+    const showCite=this.props.showCitations ?? true;
+    return h("div",{key:"ex",style:{marginTop:12,animation:"dc-up .25s ease"}},
+      h("div",{style:{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",borderRadius:12,background:a.ok?C.greenT:C.redT}},
+        h("div",{style:{width:26,height:26,borderRadius:"50%",background:a.ok?C.green:C.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,animation:"dc-pop .3s ease"}}, icon(a.ok?"check":"x",15,"#fff",3)),
+        h("div",{style:{flex:1,fontFamily:HEAD,fontWeight:800,fontSize:15.5,color:a.ok?C.greenD:C.redD}}, a.ok?(["Correct","Nicely done","Spot on","Exactly right"][(q.id.length+a.pick)%4]):"Not quite"),
+        a.ok ? h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:13,color:C.greenD}}, "+"+(retry?5:10)+" XP")
+          : h("div",{style:{fontSize:12,fontWeight:700,color:C.redD,textAlign:"right"}}, retry?"":"Added to your review deck")),
+      a.ok ? null : row(q.options[a.pick],a.pick,"Your answer",C.red,"#FDF3F2"),
+      row(q.options[ci],ci,"Correct",C.green,"#F1FAF5"),
+      others.length ? (more ? others.map(x=>row(x.o,x.i,"Also wrong",C.ink3,"#FAF8F1"))
+        : h("button",{key:"mo",className:"dc-btn dc-link",onClick:()=>{ AU.play("tap"); this.inlSet(lid,{more:Object.assign({}, st.more, {[q.id]:true})}); },
+            style:{display:"inline-flex",alignItems:"center",gap:5,background:"none",border:"none",padding:"8px 0 0",minHeight:36,fontFamily:HEAD,fontWeight:800,fontSize:13.5,color:ac.dark}}, "Why the other options are wrong", icon("chevron",13,ac.dark,2.6))) : null,
+      (showCite && q.cite) ? h("div",{style:{display:"flex",alignItems:"flex-start",gap:7,marginTop:10,fontSize:12.5,color:C.ink3,fontWeight:700,lineHeight:1.45}}, h("span",{style:{flexShrink:0,marginTop:1}}, icon("book",13,C.ink3,2.2)), h("span",null,q.cite)) : null);
+  }
+  // End of the page: the score for this pass, a second go at the misses, and the way on.
+  inlSummary(lid,st,ids,ac){
+    const ansN=ids.filter(id=>st.ans[id]).length, f=st.fin;
+    if(!f) return h("div",{key:"sum",style:{textAlign:"center",fontSize:13,color:C.ink3,fontWeight:700,padding:"6px 0 2px"}}, ansN<ids.length ? (ids.length-ansN)+" question"+(ids.length-ansN===1?"":"s")+" on this page still to answer" : "");
+    const pct=Math.round(f.pct*100), miss=ids.filter(id=>st.first[id]===false && !(st.retry[id] && st.ans[id] && st.ans[id].ok)), retrying=miss.some(id=>st.retry[id] && !st.ans[id]);
+    const great=pct>=80;
+    return h("div",{key:"sum",style:{background:great?ac.tint:C.goldT,border:"2px solid "+(great?ac.color:"#F1D79A"),borderRadius:20,padding:"18px 16px 16px",textAlign:"center",animation:"dc-up .3s ease"}},
+      h("div",{style:{width:64,height:64,borderRadius:"50%",margin:"0 auto 10px",background:great?ac.color:C.gold,boxShadow:"0 4px 0 "+(great?ac.dark:C.goldD),display:"flex",alignItems:"center",justifyContent:"center",animation:"dc-pop .45s ease"}}, icon(great?"trophy":"star",32,"#fff",2,true)),
+      h("div",{style:{fontFamily:HEAD,fontWeight:800,fontSize:21,color:C.ink}}, "Lesson complete"),
+      h("div",{style:{fontSize:14,color:C.ink2,fontWeight:700,marginTop:3}}, f.right+" of "+f.n+" right first time ("+pct+"%) · +"+st.xp+" XP"),
+      f.crownUp ? h("div",{style:{display:"inline-flex",alignItems:"center",gap:6,color:C.goldD,fontWeight:800,marginTop:8,fontFamily:HEAD}}, icon("crown",18,C.gold,2,true), "Crown level "+f.crowns) : null,
+      h("div",{style:{display:"flex",flexDirection:"column",gap:9,marginTop:14,maxWidth:420,marginLeft:"auto",marginRight:"auto"}},
+        (miss.length && !retrying) ? this.btn("Try the "+(miss.length===1?"one":miss.length)+" you missed again", ()=>this.inlRetry(lid), {full:true, upper:false, fs:15, bg:C.card, color:C.redD, dark:C.line2, border:C.line2, icon:icon("refresh",16,C.redD,2.3)}) : null),
+      miss.length ? h("div",{style:{fontSize:12.5,color:C.ink3,fontWeight:700,marginTop:9}}, "Missed questions are in your mistake log and come back in review.") : null);
   }
   readerBlock(b,ac,k,lid){
     const lab=(t,ic,col,fill)=>h("div",{style:{display:"flex",alignItems:"center",gap:7,fontSize:11,fontWeight:800,letterSpacing:1,color:col,textTransform:"uppercase",marginBottom:8}}, icon(ic,15,col,2.3,fill), t);
@@ -1771,6 +1954,15 @@ class Component extends DCLogic {
     if(b.k==="eli5") { const story=/Wrap-up/.test((READ[lid]||{}).t||"");
       return h("div",{key:k,style:{background:ac.tint,borderRadius:16,padding:"14px 16px 15px",border:"1.5px solid "+ac.color}},
         lab(story?"The whole topic as one story":"ELI5 · in plain English","star",ac.dark,true), this.rnodes(b.n,ac,k,15.5)); }
+    // Body text of a step: the teaching itself, set for reading rather than scanning.
+    if(b.k==="prose") return h("div",{key:k,style:{padding:"0 2px"}}, this.rnodes(b.n,ac,k,16,"prose"));
+    if(b.k==="call"){ const CL={example:["Example","users","#3461B4","#EAF0FA","#C5D5EF"], why:["Why it matters","bulb",C.goldD,C.goldT,"#F1D79A"],
+        tip:["Exam tip","target",C.greenD,C.greenT,"#BFE3CF"], warn:["Watch out","x",C.redD,C.redT,"#F2C4C3"]}[b.c]||["Note","book",C.ink2,"#F5F0E3",C.line2];
+      return h("div",{key:k,style:{background:CL[3],borderRadius:16,padding:"13px 15px 14px",border:"1.5px solid "+CL[4]}},
+        lab(CL[0],CL[1],CL[2],b.c==="why"), this.rnodes(b.n,ac,k,15)); }
+    if(b.k==="take") return h("div",{key:k,style:{background:C.card,borderRadius:16,padding:"13px 15px 14px",border:"2px solid "+C.green}},
+      lab("Key takeaways","check",C.greenD), this.rnodes(b.n,ac,k,15,"take"));
+    if(b.k==="step") return h("div",{key:k,style:{fontFamily:HEAD,fontWeight:800,fontSize:18,color:C.ink,marginTop:8}}, rich(b.t,k));
     if(b.k==="h"){ const m=/^(Module [\d.]+):\s*(.*)$/.exec(b.t)||[null,"",b.t];
       return h("div",{key:k,style:{marginTop:14,paddingTop:14,borderTop:"2px solid "+C.line2}},
         m[1] ? h("div",{style:{fontSize:11.5,fontWeight:800,letterSpacing:1,color:ac.dark,textTransform:"uppercase"}}, m[1]) : null,
@@ -1794,14 +1986,16 @@ class Component extends DCLogic {
   badge(b){ const x=BADGE[b]; if(!x) return null;
     return h("span",{key:"bd"+b,style:{display:"inline-block",marginLeft:7,padding:"1px 8px",borderRadius:999,background:x[1],color:x[2],fontFamily:HEAD,fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:"uppercase",verticalAlign:"1px",whiteSpace:"nowrap",lineHeight:"18px"}}, x[0]); }
   rnodes(ns,ac,k,fs,fk){
-    return h("div",{key:k,style:{display:"flex",flexDirection:"column",gap:10}}, (ns||[]).map((nd,i)=> nd.p!=null
-      ? h("div",{key:i,style:{fontSize:fs,color:C.ink,lineHeight:1.6,textWrap:"pretty"}}, rich(nd.p,k+"p"+i))
+    const pr=fk==="prose";
+    return h("div",{key:k,style:{display:"flex",flexDirection:"column",gap:pr?14:10}}, (ns||[]).map((nd,i)=> nd.p!=null
+      ? h("div",{key:i,style:{fontSize:fs,color:C.ink,lineHeight:pr?1.72:1.6,textWrap:"pretty"}}, rich(nd.p,k+"p"+i), (nd.b||[]).map(b=>this.badge(b)))
       : this.rlist(nd,ac,k+"."+i,fs,0,fk))); }
   rlist(nd,ac,k,fs,d,fk){
     const ol=!!nd.ol, items=nd.ol||nd.ul||[], trap=fk==="trap", count=x=>(x.ul||x.ol||[]).reduce((a,it)=>a+1+(it.c||[]).reduce((b,c)=>b+count(c),0),0);
     return h("div",{key:k,style:{display:"flex",flexDirection:"column",gap:d?6:10,marginTop:d?7:0}}, items.map((it,i)=>{
       const kk=k+"."+i, kids=it.c||[], foldable=fk==="sec" && d===0 && kids.length>0, folded=foldable && !!this.state.rdFold[kk];
       const mark= trap ? h("div",{style:{width:20,height:20,borderRadius:"50%",background:C.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2}}, icon("x",11,"#fff",3.2))
+        : (fk==="take" && d===0) ? h("div",{style:{width:20,height:20,borderRadius:"50%",background:C.green,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2}}, icon("check",11,"#fff",3.2))
         : ol ? h("div",{style:{minWidth:22,height:22,borderRadius:"50%",background:d?"#EDE7D8":ac.color,color:d?C.ink2:"#fff",fontFamily:HEAD,fontWeight:800,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}, String(i+1))
         : h("div",{style:{width:d?5:7,height:d?5:7,borderRadius:"50%",background:d?C.ink3:ac.color,flexShrink:0,marginTop:d?9:8}});
       const text=h("div",{style:{fontSize:d?fs-.5:fs,color:C.ink,lineHeight:1.55,textWrap:"pretty"}}, rich(it.t,kk), (it.b||[]).map(b=>this.badge(b)));

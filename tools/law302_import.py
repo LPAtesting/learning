@@ -10,9 +10,19 @@ Each file must follow the shared content model (see each file's Part A):
           Correct, Feedback per option, Hint and Source.
 
 Lessons follow the Practice lines: a stage without modules is one lesson, a stage
-intro that comes before its modules is a reading-only overview, and modules that
-have no Practice line of their own are merged into the next module that does.
+intro that comes before its modules is an overview, and modules that have no
+Check or Practice line of their own are merged into the next module that does.
 Integration sets that no Practice line names go to the Stage 6 wrap-up.
+
+Lessons are read as one page with the questions inside it (format 2):
+  "##### Title"            a step heading
+  plain paragraphs         body text
+  > **ELI5:** / **Example:** / **Why it matters:** / **Exam tip:** / **Watch out:**   callouts
+  **The law**, **Traps**, **Key takeaways** (alone on a line) + a list
+  **Check:** Q12-3.1, ...  questions answered inline at that point
+  **Practice:** ...        the end-of-lesson round, also inline
+  [Open] [Obiter] [Academic view] [Missing reading] at the end of a bullet: a badge
+Files without steps or checks (format 1) still import as before.
 """
 import json, re, sys
 
@@ -27,7 +37,8 @@ WEEKS = {
 # Path icons by lesson key (week:code). Anything missing falls back to "book".
 ICONS = {
   "12:S0": "compass", "12:S1": "branch", "12:S2": "star", "12:S3": "check", "12:3.1": "book", "12:3.2": "cards",
-  "12:3.3": "coins", "12:3.4": "map", "12:3.5": "users", "12:3.6": "lock", "12:S4": "shield", "12:S5": "layers", "12:S6": "trophy",
+  "12:3.3": "coins", "12:3.4": "map", "12:3.5": "users", "12:3.6": "lock", "12:S4": "shield", "12:4.1": "shield", "12:4.2": "target",
+  "12:4.3": "refresh", "12:S5": "layers", "12:S6": "trophy",
   "13:S0": "refresh", "13:S1": "map", "13:2.1": "x", "13:2.2": "flame", "13:2.3": "shield", "13:2.4": "users",
   "13:2.5": "merge", "13:2.6": "branch", "13:2.7": "target", "13:2.8": "clock", "13:S3": "lock", "13:S4": "book",
   "13:S5": "layers", "13:S6": "trophy",
@@ -46,6 +57,16 @@ def plain(s):
 
 
 # ---------- badges on journey bullets ----------
+TAGS = {"open": "open", "obiter": "obiter", "academic view": "acad", "missing reading": "miss"}
+TAG_RE = re.compile(r"\s*\[(Open|Obiter|Academic view|Missing reading)\]", re.I)
+
+
+def take_tags(text):
+    """Strip explicit [Open]-style tags. Returns (text, badges)."""
+    found = [TAGS[m.lower()] for m in TAG_RE.findall(text)]
+    return TAG_RE.sub("", text).rstrip(), found
+
+
 def badges(text):
     b = []
     if re.search(r"\*\*[^*]*\b(?:[Oo]pen|uncertain)\b[^*]*\*\*|\(Open\b|This is open|\bleft (?:\w+ ){0,2}open\b|open question", text):
@@ -88,12 +109,24 @@ def parse_list(lines, i, base=0):
 
 def tag_badges(node, on=True):
     for it in node.get("ul", node.get("ol", [])):
+        it["t"], b = take_tags(it["t"])
         if on:
-            b = badges(it["t"])
-            if b:
-                it["b"] = b
+            b += [x for x in badges(it["t"]) if x not in b]
+        if b:
+            it["b"] = b
         for c in it.get("c", []):
             tag_badges(c, on)
+
+
+def strip_tags(nodes):
+    """Explicit tags in prose and callouts: paragraphs carry their badges, lists use tag_badges."""
+    for n in nodes:
+        if "p" in n:
+            n["p"], b = take_tags(n["p"])
+            if b:
+                n["b"] = b
+        else:
+            tag_badges(n, False)
 
 
 # ---------- mermaid flowchart ----------
@@ -122,9 +155,20 @@ def parse_mermaid(src):
 
 
 # ---------- learning journey (Part C) ----------
-def parse_container(lines):
-    """Blocks of one stage intro or module."""
+CALLOUTS = {"Example": "example", "Why it matters": "why", "Exam tip": "tip", "Watch out": "warn"}
+TITLED = {"Traps": "traps", "Key takeaways": "take"}
+
+
+def parse_container(lines, v2=False):
+    """Blocks of one stage intro or module. Check and Practice lines become inline question blocks."""
     blocks, practice, i, sec = [], [], 0, None
+    prose = None  # format 2: the open run of body paragraphs
+
+    def para_block():
+        nonlocal prose
+        if prose is None:
+            prose = {"k": "prose", "n": []}; blocks.append(prose)
+        return prose
     while i < len(lines):
         ln = lines[i]
         s = ln.strip()
@@ -138,25 +182,32 @@ def parse_container(lines):
             if sec and sec.get("k") == "pendflow":
                 blocks.remove(sec)
             blocks.append({"k": "flow", "title": title or "Decision tree", "g": parse_mermaid(lines[i + 1:j])})
-            sec = None; i = j + 1; continue
+            sec = None; prose = None; i = j + 1; continue
+        if s.startswith("##### "):
+            blocks.append({"k": "step", "t": s[6:].strip()}); sec = None; prose = None; i += 1; continue
         if s.startswith(">"):
             q = []
             while i < len(lines) and lines[i].strip().startswith(">"):
                 q.append(re.sub(r"^\s*> ?", "", lines[i]).replace("Use the question sets in Part D to check yourself.", "Use the practice questions to check yourself.")); i += 1
-            first = q[0]
-            m = re.match(r"\*\*ELI5:\*\*\s*(.*)", first)
+            m = re.match(r"\*\*(ELI5|Example|Why it matters|Exam tip|Watch out):\*\*\s*(.*)", q[0])
             if not m:
                 continue  # a build note for the app author, not learner content
-            q[0] = m.group(1)
-            blocks.append({"k": "eli5", "n": parse_rich(q)}); sec = None; continue
-        m = re.match(r"\*\*(Objective|Big idea|Practice):\*\*\s*(.*)$", s)
+            q[0] = m.group(2)
+            nodes = parse_rich(q); strip_tags(nodes)
+            if m.group(1) == "ELI5":
+                blocks.append({"k": "eli5", "n": nodes})
+            else:
+                blocks.append({"k": "call", "c": CALLOUTS[m.group(1)], "n": nodes})
+            sec = None; prose = None; continue
+        m = re.match(r"\*\*(Objective|Big idea|Practice|Check):\*\*\s*(.*)$", s)
         if m:
             f, v = m.groups()
-            if f == "Practice":
+            if f in ("Practice", "Check"):
                 practice.append(v)
+                blocks.append({"k": "quiz", "spec": v, "end": f == "Practice"})
             else:
                 blocks.append({"k": "obj" if f == "Objective" else "big", "t": v})
-            sec = None; i += 1; continue
+            sec = None; prose = None; i += 1; continue
         m = re.match(r"^\*\*(.+?)\*\*\s*(\(.*\))?:?\s*$", s)
         if m and not re.search(r":\*\*", s):
             title, note = m.group(1), (m.group(2) or "")
@@ -166,27 +217,38 @@ def parse_container(lines):
                 title, sub = pm.group(1), pm.group(2)
             if note:
                 sub = (sub + "; " if sub else "") + note.strip("()")
-            if title == "Traps":
-                sec = {"k": "traps", "n": []}
+            if title in TITLED:
+                sec = {"k": TITLED[title], "n": []}
             elif "flowchart" in title.lower():
                 sec = {"k": "pendflow", "title": title}
             else:
                 sec = {"k": "sec", "title": title, "sub": sub, "n": []}
-            blocks.append(sec); i += 1; continue
+            blocks.append(sec); prose = None; i += 1; continue
         if LIST_RE.match(ln):
             node, i = parse_list(lines, i, len(LIST_RE.match(ln).group(1)))
+            if v2 and (sec is None or sec["k"] == "pendflow"):
+                para_block()["n"].append(node); continue  # a list inside the body text
             if sec is None or sec["k"] == "pendflow":
                 sec = {"k": "sec", "title": "", "sub": "", "n": []}; blocks.append(sec)
             sec["n"].append(node); continue
-        # loose paragraph
+        # loose paragraph (format 2: consecutive lines form one paragraph)
+        if v2:
+            j = i + 1
+            while j < len(lines) and lines[j].strip() and not re.match(r"^(#|>|```|\*\*[^*]+:?\*\*|\s*(?:[-*]|\d+\.) )", lines[j].strip()):
+                j += 1
+            para_block()["n"].append({"p": " ".join(x.strip() for x in lines[i:j])}); sec = None; i = j; continue
         if sec is None or sec["k"] not in ("sec", "traps"):
             sec = {"k": "sec", "title": "", "sub": "", "n": []}; blocks.append(sec)
         sec["n"].append({"p": s}); i += 1
     for b in blocks:
-        if b["k"] in ("sec", "traps"):
+        if b["k"] in ("sec", "traps", "take", "prose"):
             for n in b["n"]:
                 if "ul" in n or "ol" in n:
                     tag_badges(n, b["k"] == "sec")
+                elif "p" in n:
+                    n["p"], bd = take_tags(n["p"])
+                    if bd:
+                        n["b"] = bd
     return blocks, practice
 
 
@@ -263,6 +325,7 @@ def build_week(path):
         die("add Week " + wk + " to WEEKS in this script (title, colours, summary)")
     meta = WEEKS[wk]
     partc, partd = split_parts(text)
+    v2 = bool(re.search(r"^##### |^\*\*Check:\*\*", partc, re.M))
     stages = parse_journey(partc, wk)
     questions = parse_questions(partd, wk)
     qids = {q["src"] for q in questions}
@@ -270,7 +333,7 @@ def build_week(path):
     out_stages = []
     for st in stages:
         sid = "w%s.s%s" % (wk, st["n"])
-        intro, intro_prac = parse_container(st["intro"])
+        intro, intro_prac = parse_container(st["intro"], v2)
         lessons = []
         is_cmp = re.search(r"compar", st["title"], re.I)
         if is_cmp:
@@ -282,7 +345,7 @@ def build_week(path):
                                 "blocks": intro, "prac": intro_prac})
             pend = []
             for md in st["mods"]:
-                blocks, prac = parse_container(md["lines"])
+                blocks, prac = parse_container(md["lines"], v2)
                 pend.append((md, blocks))
                 if prac:
                     if len(pend) == 1:
@@ -306,6 +369,9 @@ def build_week(path):
             ids = []
             for p in l.pop("prac"):
                 ids.extend(expand_ids(p, wk))
+            for b in l["blocks"]:
+                if b["k"] == "quiz":
+                    b["ids"] = ["LAW302-" + x for x in expand_ids(b.pop("spec"), wk)]
             for q in ids:
                 if q not in qids:
                     die("practice names a missing question: " + q)
@@ -322,6 +388,8 @@ def build_week(path):
     for q in questions:
         if q["src"] not in used:
             used[q["src"]] = last["id"]
+            if v2:
+                sys.stderr.write("law302_import: warning: %s is in no Check or Practice line; added to %s\n" % (q["src"], last["id"]))
     for q in questions:
         q["lesson"] = used.pop(q["src"])
     for st in out_stages:
@@ -333,24 +401,38 @@ def build_week(path):
     return week, questions
 
 
+CMP_RE = re.compile(r"(CL|REFJA|CCAA): (.*)$")
+
+
 def to_compare(blocks):
-    """Stage 5: the per-issue bullets become one comparison table."""
-    out, rows = [], []
-    for b in blocks:
-        if b["k"] != "sec":
-            out.append(b); continue
+    """Stage 5: the per-issue bullets (children "CL: ...", "REFJA: ...", "CCAA: ...") become one comparison table.
+    Format 1 turns every list section into the table, placed at the end; format 2 converts only the sections
+    that hold regime rows, in place, and leaves the teaching text around them alone."""
+    def is_cmp(b):
+        return any(CMP_RE.match(ci["t"]) for n in b["n"] for it in n.get("ul", []) for c in it.get("c", []) for ci in c.get("ul", []))
+    def rows_of(b):
+        rows = []
         for n in b["n"]:
             for it in n.get("ul", []):
                 row = {"h": plain(it["t"]), "cells": {}, "note": []}
                 for c in it.get("c", []):
                     for ci in c.get("ul", []):
-                        m = re.match(r"(CL|REFJA|CCAA): (.*)$", ci["t"])
+                        m = CMP_RE.match(ci["t"])
                         if m:
                             row["cells"][m.group(1)] = m.group(2)
                         else:
                             row["note"].append(ci["t"])
                 rows.append(row)
-    out.append({"k": "cmp", "cols": [["CL", "Common law"], ["REFJA", "REFJA"], ["CCAA", "CCAA"]], "rows": rows})
+        return rows
+    cols = [["CL", "Common law"], ["REFJA", "REFJA"], ["CCAA", "CCAA"]]
+    if any(b["k"] in ("quiz", "step") for b in blocks):
+        return [{"k": "cmp", "cols": cols, "rows": rows_of(b)} if b["k"] == "sec" and is_cmp(b) else b for b in blocks]
+    out, rows = [], []
+    for b in blocks:
+        if b["k"] != "sec":
+            out.append(b); continue
+        rows.extend(rows_of(b))
+    out.append({"k": "cmp", "cols": cols, "rows": rows})
     return out
 
 
